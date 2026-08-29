@@ -80,11 +80,6 @@ class _SplashPageState extends State<SplashPage> with SingleTickerProviderStateM
                 ),
                 const SizedBox(height: 80),
                 const CircularProgressIndicator(color: AppColors.primaryOrange),
-                const SizedBox(height: 24),
-                const Text(
-                  'Powered by KhoMs Tech',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                ),
               ],
             ),
           ),
