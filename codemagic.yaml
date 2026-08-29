@@ -4,7 +4,7 @@
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
-      flutter: default
+      flutter: stable
       xcode: latest
       cocoapods: default
     scripts:
@@ -24,33 +24,6 @@
     artifacts:
       - build/ios/iphoneos/Runner.app
       - rabitati-ios-unsigned.ipa
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
-        notify:
-          success: true
-          failure: true
-
-  ios-release-workflow:
-    name: iOS App Store / Ad-Hoc Release (Signed)
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      flutter: default
-      xcode: latest
-      cocoapods: default
-      # Configure Apple Code Signing in Codemagic UI:
-      # https://docs.codemagic.io/code-signing-yaml/signing-ios/
-    scripts:
-      - name: Set up dependencies
-        script: |
-          flutter packages get
-      - name: Build iOS IPA
-        script: |
-          flutter build ipa --release
-    artifacts:
-      - build/ios/ipa/*.ipa
     publishing:
       email:
         recipients:
