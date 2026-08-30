@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/club_logo_widget.dart';
 
 class ClubProfilePage extends StatelessWidget {
   final String clubName;
@@ -49,7 +50,7 @@ class ClubProfilePage extends StatelessWidget {
                       CircleAvatar(
                         radius: 60,
                         backgroundColor: Colors.white,
-                        child: logoUrl.isNotEmpty ? Image.network(logoUrl, height: 80, errorBuilder: (c,e,s) => const Icon(Icons.shield, size: 40)) : const Icon(Icons.shield, size: 60, color: Colors.grey),
+                        child: ClubLogoWidget(logoUrl: logoUrl, size: 80, fallbackColor: Colors.grey),
                       ),
                       const SizedBox(height: 16),
                       Text(clubName, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),

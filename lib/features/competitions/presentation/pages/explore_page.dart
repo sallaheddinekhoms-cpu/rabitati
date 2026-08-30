@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/widgets/club_logo_widget.dart';
 import '../../../favorites/presentation/cubit/favorites_cubit.dart';
 import 'club_profile_page.dart';
 
@@ -134,9 +135,7 @@ class _ExplorePageState extends State<ExplorePage> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       leading: CircleAvatar(
                         backgroundColor: Colors.transparent,
-                        child: logoUrl.isNotEmpty
-                            ? Image.network(logoUrl, errorBuilder: (c, e, s) => const Icon(Icons.shield, color: AppColors.textSecondary))
-                            : const Icon(Icons.shield, color: AppColors.textSecondary),
+                        child: ClubLogoWidget(logoUrl: logoUrl, size: 40),
                       ),
                       title: Text(team, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                       trailing: Row(
