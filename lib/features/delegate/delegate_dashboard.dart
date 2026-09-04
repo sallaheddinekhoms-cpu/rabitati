@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -103,11 +103,17 @@ class DelegateDashboard extends StatelessWidget {
                             label: const Text('تقرير المباراة'),
                           ),
                           ElevatedButton.icon(
-  onPressed: () => PdfGenerator.generateAndPrintMatchSheet(match, matchId),
-  icon: const Icon(Icons.picture_as_pdf),
-  label: const Text('ورقة المباراة PDF'),
-  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
-),
+                            onPressed: () => PdfGenerator.generateAndPrintMatchSheet(match, matchId),
+                            icon: const Icon(Icons.picture_as_pdf),
+                            label: const Text('ورقة المباراة PDF'),
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
+                          ),
+                          ElevatedButton.icon(
+                            onPressed: () => _openAccreditedJournalistsDialog(context, matchId, match),
+                            icon: const Icon(Icons.badge),
+                            label: const Text('الصحفيون المعتمدون'),
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F766E), foregroundColor: Colors.white),
+                          ),
                         ],
                       )
                     ],
@@ -117,6 +123,97 @@ class DelegateDashboard extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+
+  void _openAccreditedJournalistsDialog(BuildContext context, String matchId, Map<String, dynamic> matchData) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.badge, color: Color(0xFF0F766E)),
+            SizedBox(width: 8),
+            Text('الصحفيون المعتمدون للمباراة', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${matchData['team1']} ضد ${matchData['team2']} (${matchData['league'] ?? ''})',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 320,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('media_accreditations')
+                      .where('matchId', isEqualTo: matchId)
+                      .where('status', isEqualTo: 'approved')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final docs = snapshot.data?.docs ?? [];
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(Icons.person_off, size: 48, color: Colors.grey),
+                            SizedBox(height: 8),
+                            Text('لم يتم اعتماد أي صحفي لهذه المباراة بعد.', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      itemCount: docs.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: const Color(0xFF0F766E).withOpacity(0.15),
+                            child: const Icon(Icons.person, color: Color(0xFF0F766E)),
+                          ),
+                          title: Text(data['journalistName'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('${data['mediaOutlet']} - ${data['mediaType'] ?? ''}', style: const TextStyle(fontSize: 12)),
+                              Text('بطاقة الصحافة: ${data['pressCardNumber']} | هاتف: ${data['phone']}', style: const TextStyle(fontSize: 11, color: Colors.black54)),
+                            ],
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.green.shade300),
+                            ),
+                            child: const Text('معتمد ✅', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 11)),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إغلاق')),
+        ],
       ),
     );
   }

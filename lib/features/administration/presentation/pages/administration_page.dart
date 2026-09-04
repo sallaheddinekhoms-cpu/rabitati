@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../news/presentation/pages/news_page.dart';
@@ -9,7 +8,7 @@ import 'disciplinary_page.dart';
 import 'regulations_page.dart';
 import 'referees_page.dart';
 import 'forms_page.dart';
-import 'about_app_page.dart';
+import 'press_portal_page.dart';
 import '../../../delegate/delegate_dashboard.dart';
 
 class AdministrationPage extends StatelessWidget {
@@ -124,7 +123,19 @@ class AdministrationPage extends StatelessWidget {
           },
         ),
 
-        // 6. بوابة محافظي المباريات
+        // 6. بوابة الإعلام والصحافة (طلب الاعتماد الصحفي)
+        _buildAdminCard(
+          context: context, 
+          title: 'بوابة الإعلام والصحافة',
+          subtitle: 'طلب اعتمادات رسمية لتغطية المباريات، ومتابعة البطاقة الرقمية.',
+          icon: Icons.badge,
+          color: const Color(0xFF0F766E),
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const PressPortalPage()));
+          },
+        ),
+
+        // 7. بوابة محافظي المباريات
         _buildAdminCard(
           context: context, 
           title: 'بوابة محافظي المباريات',
@@ -140,7 +151,7 @@ class AdministrationPage extends StatelessWidget {
           },
         ),
 
-        // 7. الإعدادات والتفضيلات
+        // 8. الإعدادات والتفضيلات
         _buildAdminCard(
           context: context,
           title: 'الإعدادات والتفضيلات',
