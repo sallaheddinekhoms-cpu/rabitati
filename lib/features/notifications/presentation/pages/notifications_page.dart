@@ -1,6 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/theme_extensions.dart';
 import 'package:intl/intl.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -12,12 +12,13 @@ class NotificationsPage extends StatelessWidget {
     initializeDateFormatting('ar', null);
     
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
-        title: const Text('التنبيهات', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('التنبيهات والإشعارات', style: TextStyle(fontWeight: FontWeight.bold, color: context.appPrimary)),
         centerTitle: true,
-        backgroundColor: AppColors.cardBackground,
-        elevation: 0,
+        backgroundColor: context.appCardBackground,
+        elevation: 0.5,
+        iconTheme: IconThemeData(color: context.appPrimary),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -26,7 +27,7 @@ class NotificationsPage extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator(color: context.appPrimary));
           }
           final docs = snapshot.data?.docs ?? [];
           
@@ -35,9 +36,9 @@ class NotificationsPage extends StatelessWidget {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.notifications_off, size: 80, color: AppColors.textSecondary.withOpacity(0.5)),
+                  Icon(Icons.notifications_off, size: 80, color: context.appTextSecondary.withOpacity(0.4)),
                   const SizedBox(height: 16),
-                  const Text('لا توجد تنبيهات جديدة', style: TextStyle(color: AppColors.textSecondary, fontSize: 18)),
+                  Text('لا توجد تنبيهات جديدة', style: TextStyle(color: context.appTextSecondary, fontSize: 18, fontWeight: FontWeight.w600)),
                 ],
               ),
             );
@@ -50,7 +51,7 @@ class NotificationsPage extends StatelessWidget {
               final data = docs[index].data() as Map<String, dynamic>;
               final title = data['title'] ?? '';
               final body = data['body'] ?? '';
-              final type = data['type'] ?? 'عاجل'; // عاجل، إداري، رياضي
+              final type = data['type'] ?? 'عاجل';
               
               DateTime? date;
               if (data['timestamp'] != null) {
@@ -59,34 +60,35 @@ class NotificationsPage extends StatelessWidget {
               String timeStr = date != null ? DateFormat('HH:mm - yyyy/MM/dd').format(date) : '';
 
               IconData icon = Icons.notifications;
-              Color color = AppColors.primaryOrange;
+              Color color = context.appPrimary;
               
               if (type == 'عاجل') { icon = Icons.warning; color = Colors.red; }
-              else if (type == 'إداري') { icon = Icons.gavel; color = Colors.blue; }
-              else if (type == 'رياضي') { icon = Icons.sports_soccer; color = Colors.green; }
+              else if (type == 'إداري') { icon = Icons.gavel; color = Colors.blue.shade700; }
+              else if (type == 'رياضي') { icon = Icons.sports_soccer; color = const Color(0xFF1B7A36); }
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: AppColors.cardBackground,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
+                  color: context.appCardBackground,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.appBorder),
+                  boxShadow: context.appCardShadow,
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
                   leading: Container(
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: color.withOpacity(0.12), shape: BoxShape.circle),
                     child: Icon(icon, color: color),
                   ),
-                  title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                  title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.appTextPrimary)),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 6),
-                      Text(body, style: const TextStyle(color: AppColors.textSecondary)),
+                      Text(body, style: TextStyle(color: context.appTextSecondary, fontSize: 13)),
                       const SizedBox(height: 8),
-                      Text(timeStr, style: const TextStyle(color: AppColors.primaryOrange, fontSize: 10)),
+                      Text(timeStr, style: TextStyle(color: context.appPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),

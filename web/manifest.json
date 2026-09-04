@@ -1,11 +1,11 @@
-{
-    "name": "rabitati",
-    "short_name": "rabitati",
+﻿{
+    "name": "الرابطة الجهوية لكرة القدم البليدة",
+    "short_name": "رابطة البليدة",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F1F8F4",
+    "theme_color": "#1B7A36",
+    "description": "تطبيق الرابطة الجهوية لكرة القدم البليدة - النتائج، الترتيب، والأخبار الرسمية",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

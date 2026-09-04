@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../data/repositories/standings_repository.dart';
 import 'standings_state.dart';
@@ -7,7 +7,7 @@ class StandingsCubit extends Cubit<StandingsState> {
   final StandingsRepository _repository;
   StreamSubscription? _subscription;
   
-  String currentLeague = 'الجهوي الأول (أكابر)';
+  String currentLeague = 'جهوي أول';
 
   StandingsCubit(this._repository) : super(StandingsInitial()) {
     loadStandings(currentLeague);

@@ -1,8 +1,11 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/theme/theme_cubit.dart';
+import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/utils/in_app_notification.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
 import 'home_tab.dart';
@@ -10,6 +13,7 @@ import '../../../competitions/presentation/pages/explore_page.dart';
 import '../../../match_details/presentation/pages/results_page.dart';
 import '../../../competitions/presentation/pages/standings_page.dart';
 import '../../../administration/presentation/pages/administration_page.dart';
+import '../../../../core/widgets/ios_install_banner.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -123,11 +127,13 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = context.watch<ThemeCubit>().state == ThemeMode.dark;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.appBackground,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
+        backgroundColor: context.appCardBackground,
+        elevation: 0.5,
         title: Row(
           children: [
             Container(
@@ -147,19 +153,34 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _currentIndex == 0 ? 'رابطتي - الرابطة الجهوية لكرة القدم البليدة' : _titles[_currentIndex],
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textPrimary),
+                _currentIndex == 0 ? 'الرابطة الجهوية لكرة القدم البليدة' : _titles[_currentIndex],
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                  color: context.appPrimary,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
         actions: [
+          // Theme Toggle Button
+          IconButton(
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              color: context.appPrimary,
+            ),
+            tooltip: isDark ? 'الوضع النهاري' : 'الوضع الليلي',
+            onPressed: () {
+              context.read<ThemeCubit>().toggleTheme();
+            },
+          ),
           Stack(
             alignment: Alignment.center,
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_active, color: AppColors.primaryOrange),
+                icon: Icon(Icons.notifications_active, color: context.appPrimary),
                 onPressed: _openNotificationsPage,
               ),
               if (_unreadNotificationsCount > 0)
@@ -189,21 +210,45 @@ class _HomePageState extends State<HomePage> {
                 ),
             ],
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
         ],
       ),
-      body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore), label: 'استكشاف'),
-          BottomNavigationBarItem(icon: Icon(Icons.sports_soccer_outlined), activeIcon: Icon(Icons.sports_soccer), label: 'النتائج'),
-          BottomNavigationBarItem(icon: Icon(Icons.format_list_numbered), activeIcon: Icon(Icons.format_list_numbered), label: 'الترتيب'),
-          BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_outlined), activeIcon: Icon(Icons.admin_panel_settings), label: 'إدارة الرابطة'),
+      body: Column(
+        children: [
+          const IosInstallBanner(),
+          Expanded(child: _pages[_currentIndex]),
         ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: context.appCardBackground,
+          border: Border(top: BorderSide(color: context.appBorder, width: 0.8)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          selectedItemColor: context.appPrimary,
+          unselectedItemColor: context.appTextSecondary,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontSize: 11),
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'الرئيسية'),
+            BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), activeIcon: Icon(Icons.explore), label: 'استكشاف'),
+            BottomNavigationBarItem(icon: Icon(Icons.sports_soccer_outlined), activeIcon: Icon(Icons.sports_soccer), label: 'النتائج'),
+            BottomNavigationBarItem(icon: Icon(Icons.format_list_numbered), activeIcon: Icon(Icons.format_list_numbered), label: 'الترتيب'),
+            BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_outlined), activeIcon: Icon(Icons.admin_panel_settings), label: 'إدارة الرابطة'),
+          ],
+        ),
       ),
     );
   }
