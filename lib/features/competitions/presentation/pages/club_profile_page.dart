@@ -41,8 +41,8 @@ class ClubProfilePage extends StatelessWidget {
             final clubData = snapshot.data!.docs.first.data() as Map<String, dynamic>;
             final logoUrl = clubData['logoUrl'] ?? '';
             final foundation = clubData['foundation'] ?? 'غير متوفر';
-            final president = clubData['president'] ?? 'غير متوفر';
-            final coaches = clubData['coaches'] ?? 'غير متوفر';
+            final stadium = clubData['stadium'] ?? clubData['president'] ?? 'غير متوفر';
+            final colors = clubData['colors'] ?? clubData['coaches'] ?? 'غير متوفر';
             
             return TabBarView(
               children: [
@@ -77,8 +77,8 @@ class ClubProfilePage extends StatelessWidget {
                       ),
                       const SizedBox(height: 28),
                       _buildInfoCard(context, 'سنة التأسيس', foundation, Icons.calendar_today),
-                      _buildInfoCard(context, 'الرئيس الحالي', president, Icons.person),
-                      _buildInfoCard(context, 'الطاقم الفني', coaches, Icons.sports),
+                      _buildInfoCard(context, 'الملعب', stadium, Icons.stadium),
+                      _buildInfoCard(context, 'الألوان', colors, Icons.palette),
                     ],
                   ),
                 ),

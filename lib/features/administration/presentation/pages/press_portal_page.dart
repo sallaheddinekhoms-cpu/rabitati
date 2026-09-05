@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/theme_extensions.dart';
 
 class PressPortalPage extends StatefulWidget {
@@ -27,10 +28,35 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
   Map<String, dynamic>? _selectedMatchData;
   String _selectedMediaType = 'صحافة مكتوبة';
   bool _isSubmitting = false;
+  String? _photoBase64;
 
   // Tracking Tab
   final TextEditingController _trackingQueryCtrl = TextEditingController();
   String _activeSearchQuery = '';
+
+  Future<void> _pickJournalistPhoto() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 400,
+        maxHeight: 400,
+        imageQuality: 70,
+      );
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        setState(() {
+          _photoBase64 = base64Encode(bytes);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر اختيار الصورة: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
 
   final List<String> _leagues = [
     'جهوي أول',
@@ -123,6 +149,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
         'pressCardNumber': _cardNumCtrl.text.trim(),
         'phone': _phoneCtrl.text.trim(),
         'email': _emailCtrl.text.trim(),
+        'photoBase64': _photoBase64 ?? '',
         'league': _selectedLeague,
         'matchId': _selectedMatchId,
         'matchTitle': matchTitle,
@@ -138,10 +165,11 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
 
       if (!mounted) return;
 
-      // Update tracking query
+      // Update tracking query and reset photo
       setState(() {
         _activeSearchQuery = _phoneCtrl.text.trim();
         _trackingQueryCtrl.text = _phoneCtrl.text.trim();
+        _photoBase64 = null;
       });
 
       showDialog(
@@ -212,45 +240,6 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
-    }
-  }
-
-  void _sendBadgeEmail(Map<String, dynamic> data) async {
-    final email = data['email'] ?? '';
-    final ref = data['referenceCode'] ?? '';
-    final match = data['matchTitle'] ?? '';
-    final stadium = data['stadium'] ?? '';
-    final date = data['matchDate'] ?? '';
-    final journalist = data['journalistName'] ?? '';
-    final outlet = data['mediaOutlet'] ?? '';
-
-    final subject = Uri.encodeComponent('بطاقة الاعتماد الصحفي الرسمي - الرابطة الجهوية البليدة ($ref)');
-    final body = Uri.encodeComponent(
-      'السيد(ة) الإعلامي(ة): $journalist\n'
-      'المؤسسة: $outlet\n\n'
-      'يسر الرابطة الجهوية لكرة القدم البليدة إعلامكم بقبول طلب الاعتماد لتغطية المباراة الرسمية:\n\n'
-      '⚽ المباراة: $match\n'
-      '🏟️ الملعب: $stadium\n'
-      '📅 التاريخ والتوقيت: $date\n'
-      '🎫 رقم المرجع: $ref\n'
-      '📌 ملاحظات الدخول: ${data['adminNote'] ?? 'معتمد رسمياً للدخول'}\n\n'
-      'يرجى الاستظهار بهذه الرسالة أو ببطاقة الاعتماد الرقمية عبر تطبيق رابطتي مع بطاقة الصحافة الوطنية عند مدخل الملعب.\n\n'
-      'مع تحيات خلية الإعلام والاتصال - الرابطة الجهوية لكرة القدم البليدة',
-    );
-
-    final mailtoUri = Uri.parse('mailto:$email?subject=$subject&body=$body');
-    try {
-      if (await canLaunchUrl(mailtoUri)) {
-        await launchUrl(mailtoUri);
-      } else {
-        await launchUrl(mailtoUri, mode: LaunchMode.externalApplication);
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تعذر فتح تطبيق البريد الإلكتروني تلقائياً.')),
-        );
-      }
     }
   }
 
@@ -362,10 +351,28 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                       const Divider(),
                       const SizedBox(height: 10),
 
-                      // Journalist Info
+                      // Journalist Info + Photo + QR Code
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          if ((data['photoBase64'] ?? '').toString().isNotEmpty)
+                            Container(
+                              width: 65,
+                              height: 80,
+                              margin: const EdgeInsets.only(left: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF1B7A36), width: 1.5),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image.memory(
+                                  base64Decode(data['photoBase64']),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 36, color: Colors.grey),
+                                ),
+                              ),
+                            ),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -385,8 +392,8 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                           Column(
                             children: [
                               Container(
-                                width: 95,
-                                height: 95,
+                                width: 85,
+                                height: 85,
                                 decoration: BoxDecoration(
                                   border: Border.all(color: Colors.grey.shade300),
                                   borderRadius: BorderRadius.circular(8),
@@ -396,12 +403,12 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                                   child: Image.network(
                                     qrUrl,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => const Icon(Icons.qr_code, size: 70, color: Colors.green),
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.qr_code, size: 60, color: Colors.green),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              Text(ref, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black54)),
+                              Text(ref, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.black54)),
                             ],
                           ),
                         ],
@@ -425,32 +432,40 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                       ],
 
                       const SizedBox(height: 16),
-                      // Actions row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF1B7A36),
-                                side: const BorderSide(color: Color(0xFF1B7A36)),
+                      // Email confirmation notification banner from administration
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.green.shade200),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.mark_email_read, color: Colors.green, size: 18),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'تم إرسال نسخة الاعتماد رسمياً إلى بريدك الإلكتروني من قبل إدارة الرابطة.',
+                                style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
                               ),
-                              icon: const Icon(Icons.email, size: 16),
-                              label: const Text('إرسال للإيميل', style: TextStyle(fontSize: 12)),
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _sendBadgeEmail(data);
-                              },
                             ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 42,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1B7A36),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1B7A36)),
-                              onPressed: () => Navigator.pop(ctx),
-                              child: const Text('إغلاق', style: TextStyle(color: Colors.white, fontSize: 12)),
-                            ),
-                          ),
-                        ],
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('إغلاق', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ),
                       ),
                     ],
                   ),
@@ -839,6 +854,88 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
               ),
               validator: (v) => (v == null || !v.contains('@')) ? 'يرجى إدخال بريد إلكتروني صحيح' : null,
             ),
+            const SizedBox(height: 14),
+
+            // Photo Upload
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.appCardBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.appBorder),
+              ),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: _pickJournalistPhoto,
+                    child: Container(
+                      width: 65,
+                      height: 75,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: context.appPrimary.withOpacity(0.5), width: 1.5),
+                      ),
+                      child: _photoBase64 != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                base64Decode(_photoBase64!),
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo, color: context.appPrimary, size: 24),
+                                const SizedBox(height: 4),
+                                const Text('الصورة', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                              ],
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'الصورة الشخصية للصحفي (اختياري)',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'تظهر الصورة في بطاقة الاعتماد الرقمية PRESS PASS عند القبول.',
+                          style: TextStyle(fontSize: 11, color: context.appTextSecondary),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              icon: const Icon(Icons.photo_library, size: 16),
+                              label: Text(_photoBase64 != null ? 'تغيير الصورة' : 'اختيار صورة', style: const TextStyle(fontSize: 12)),
+                              onPressed: _pickJournalistPhoto,
+                            ),
+                            if (_photoBase64 != null) ...[
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                tooltip: 'إزالة الصورة',
+                                onPressed: () => setState(() => _photoBase64 = null),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Submit Button
@@ -1061,29 +1158,21 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
 
                                 if (status == 'approved') ...[
                                   const SizedBox(height: 14),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: ElevatedButton.icon(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.green,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          ),
-                                          icon: const Icon(Icons.badge, color: Colors.white, size: 18),
-                                          label: const Text('عرض البطاقة الرقمية', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                          onPressed: () => _showDigitalBadgeDialog(data),
-                                        ),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 44,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       ),
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        style: IconButton.styleFrom(
-                                          backgroundColor: Colors.green.shade50,
-                                        ),
-                                        icon: const Icon(Icons.email, color: Colors.green),
-                                        tooltip: 'إرسال نسخة للإيميل',
-                                        onPressed: () => _sendBadgeEmail(data),
+                                      icon: const Icon(Icons.badge, color: Colors.white, size: 20),
+                                      label: const Text(
+                                        'عرض بطاقة الاعتماد الرقمية (PRESS PASS)',
+                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                                       ),
-                                    ],
+                                      onPressed: () => _showDigitalBadgeDialog(data),
+                                    ),
                                   ),
                                 ],
                               ],
