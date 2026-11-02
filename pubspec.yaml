@@ -2,7 +2,7 @@ name: rabitati
 description: "A new Flutter project."
 publish_to: 'none'
 
-version: 1.1.0+2
+version: 1.4.0+11
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -24,6 +24,8 @@ dependencies:
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.1
   image_picker: ^1.2.3
+  flutter_local_notifications: ^22.3.1
+  workmanager: ^0.10.10
 
 dev_dependencies:
   flutter_launcher_icons: ^0.13.1
@@ -37,3 +39,5 @@ flutter:
     - assets/images/logo.png
     - assets/images/league_logo.png
     - assets/images/league_logo_splash.jpg
+    - assets/fonts/Amiri-Regular.ttf
+    - assets/fonts/Amiri-Bold.ttf

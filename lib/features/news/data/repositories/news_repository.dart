@@ -1,16 +1,34 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/network/api_client.dart';
 import '../models/news_model.dart';
 
 class NewsRepository {
-  final FirebaseFirestore _firestore;
+  final ApiClient _apiClient;
 
-  NewsRepository({FirebaseFirestore? firestore}) : _firestore = firestore ?? FirebaseFirestore.instance;
+  NewsRepository({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
-  Stream<List<NewsModel>> getLiveNews() {
-    return _firestore
-        .collection('news')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => NewsModel.fromFirestore(doc)).toList());
+  Future<List<NewsModel>> getNews({int? categoryId, String? search}) async {
+    final list = await _apiClient.getNews(categoryId: categoryId, search: search);
+    return list.map((json) => NewsModel.fromJson(json)).toList();
+  }
+
+  Stream<List<NewsModel>> getLiveNews() async* {
+    // 1. Emits immediately from cache/API
+    final initialList = await getNews();
+    yield initialList;
+
+    // 2. Poll every 60 seconds
+    while (true) {
+      await Future.delayed(const Duration(seconds: 60));
+      final updatedList = await getNews();
+      yield updatedList;
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> getUrgentNewsStream() async* {
+    yield await _apiClient.getUrgentNews();
+    while (true) {
+      await Future.delayed(const Duration(seconds: 45));
+      yield await _apiClient.getUrgentNews();
+    }
   }
 }

@@ -46,6 +46,11 @@ class MatchesCubit extends Cubit<MatchesState> {
 
     if (currentDateTab == 'اليوم') {
       filtered = _allMatches.where((m) => m.date == todayStr).toList();
+      // إذا لم تكن هناك مباريات مبرمجة في تاريخ اليوم بالتحديد (مثل أيام الإثنين إلى الخميس أو الأحد)،
+      // نعرض تلقائياً مباريات الأسبوع / الجولة الحالية لكي تظهر فور فتح التطبيق
+      if (filtered.isEmpty) {
+        filtered = _allMatches;
+      }
     } else if (currentDateTab == 'الأمس') {
       filtered = _allMatches.where((m) => m.date == yesterdayStr).toList();
     } else if (currentDateTab == 'غداً') {

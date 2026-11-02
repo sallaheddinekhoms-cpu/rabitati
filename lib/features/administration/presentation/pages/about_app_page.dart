@@ -1,14 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 
 class AboutAppPage extends StatefulWidget {
   const AboutAppPage({super.key});
 
-  static const String appVersion = '1.1.0';
-  static const String buildNumber = '2';
-  static const String releaseDate = '3 سبتمبر 2026';
+  static const String appVersion = '1.4.0';
+  static const String buildNumber = '11';
+  static const String releaseDate = '02 نوفمبر 2026';
 
   @override
   State<AboutAppPage> createState() => _AboutAppPageState();
@@ -42,11 +42,7 @@ class _AboutAppPageState extends State<AboutAppPage> {
     setState(() => _isCheckingUpdates = true);
 
     try {
-      // فحص إصدار السيرفر من فايربيس (app_config -> version) إن وجد
-      final doc = await FirebaseFirestore.instance.collection('app_config').doc('version').get().timeout(
-        const Duration(seconds: 4),
-        onTimeout: () => throw Exception('timeout'),
-      );
+      final config = await ApiClient().getConfig();
 
       await Future.delayed(const Duration(milliseconds: 600));
 
@@ -55,9 +51,9 @@ class _AboutAppPageState extends State<AboutAppPage> {
 
         String latestVersion = AboutAppPage.appVersion;
         String? downloadUrl;
-        if (doc.exists && doc.data() != null) {
-          latestVersion = doc.data()!['latestVersion'] ?? AboutAppPage.appVersion;
-          downloadUrl = doc.data()!['downloadUrl'];
+        if (config != null) {
+          latestVersion = config['latest_version'] ?? AboutAppPage.appVersion;
+          downloadUrl = config['download_url'];
         }
 
         if (latestVersion != AboutAppPage.appVersion && downloadUrl != null) {
@@ -98,7 +94,7 @@ class _AboutAppPageState extends State<AboutAppPage> {
                   Text('أنت على أحدث إصدار'),
                 ],
               ),
-              content: Text('أنت تستخدم أحدث إصدار رسمي متوفر حالياً:\nالإصدار ${AboutAppPage.appVersion} Beta.\nلا توجد تحديثات جديدة في الوقت الحالي.'),
+              content: Text('أنت تستخدم أحدث إصدار رسمي متوفر حالياً:\nالإصدار ${AboutAppPage.appVersion} (النسخة الرسمية المعتمدة).\nلا توجد تحديثات جديدة في الوقت الحالي.'),
               actions: [
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: context.appPrimary),
@@ -124,7 +120,7 @@ class _AboutAppPageState extends State<AboutAppPage> {
                 Text('تطبيقك محدّث'),
               ],
             ),
-            content: Text('أنت تستخدم أحدث إصدار متوفر حالياً (v${AboutAppPage.appVersion} Beta). لا توجد تحديثات جديدة.'),
+            content: Text('أنت تستخدم أحدث إصدار متوفر حالياً (v${AboutAppPage.appVersion} - النسخة الرسمية المعتمدة). لا توجد تحديثات جديدة.'),
             actions: [
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: context.appPrimary),
@@ -209,7 +205,7 @@ class _AboutAppPageState extends State<AboutAppPage> {
                 border: Border.all(color: context.appPrimary.withOpacity(0.3)),
               ),
               child: const Text(
-                'الإصدار ${AboutAppPage.appVersion} (نسخة تجريبية / Beta)',
+                'الإصدار ${AboutAppPage.appVersion} (النسخة الرسمية المعتمدة)',
                 style: TextStyle(
                   color: Color(0xFF1B7A36),
                   fontWeight: FontWeight.bold,
@@ -407,6 +403,26 @@ class _AboutAppPageState extends State<AboutAppPage> {
                   _buildInfoRow(context, 'رقم البناء', 'Build ${AboutAppPage.buildNumber}'),
                   const Divider(height: 20),
                   _buildInfoRow(context, 'المنصة', 'Android / iOS (PWA) / Web'),
+                  const Divider(height: 20),
+                  InkWell(
+                    onTap: () => _openUrl('https://rabitati-app.web.app/privacy.html'),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('سياسة الخصوصية (Privacy Policy)', style: TextStyle(fontSize: 13, color: context.appTextSecondary)),
+                          Row(
+                            children: [
+                              Text('عرض الوثيقة', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: context.appPrimary)),
+                              const SizedBox(width: 4),
+                              Icon(Icons.open_in_new, size: 14, color: context.appPrimary),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

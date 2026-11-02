@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
@@ -17,7 +17,7 @@ class InAppNotification {
     _currentEntry?.remove();
     _currentEntry = null;
 
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.maybeOf(context);
     if (overlay == null) return;
 
     IconData icon = Icons.notifications;

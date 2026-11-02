@@ -1,9 +1,29 @@
-﻿import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 
-class RefereesPage extends StatelessWidget {
+class RefereesPage extends StatefulWidget {
   const RefereesPage({super.key});
+
+  @override
+  State<RefereesPage> createState() => _RefereesPageState();
+}
+
+class _RefereesPageState extends State<RefereesPage> {
+  late Future<List<Map<String, dynamic>>> _docsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDocs();
+  }
+
+  void _loadDocs() {
+    setState(() {
+      _docsFuture = ApiClient().getDocuments(category: 'arbitrage');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +31,7 @@ class RefereesPage extends StatelessWidget {
       backgroundColor: context.appBackground,
       appBar: AppBar(
         title: Text(
-          'تعيينات الحكام',
+          'تعيينات الحكام وجداول التحكيم',
           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: context.appPrimary),
         ),
         centerTitle: true,
@@ -19,145 +39,121 @@ class RefereesPage extends StatelessWidget {
         elevation: 0.5,
         iconTheme: IconThemeData(color: context.appPrimary),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('referee_designations')
-            .orderBy('createdAt', descending: true)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator(color: context.appPrimary));
-          }
-          final docs = snapshot.data?.docs ?? [];
+      body: RefreshIndicator(
+        onRefresh: () async => _loadDocs(),
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _docsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator(color: context.appPrimary));
+            }
+            final docs = snapshot.data ?? [];
 
-          if (docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.sports, size: 70, color: context.appTextSecondary.withOpacity(0.4)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'لا توجد تعيينات حكام منشورة حالياً',
-                    style: TextStyle(color: context.appTextSecondary, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final match = data['match'] ?? 'مباراة غير محددة';
-              final league = data['league'] ?? '';
-              final mainReferee = data['mainReferee'] ?? 'غير محدد';
-              final assistant1 = data['assistant1'] ?? '';
-              final assistant2 = data['assistant2'] ?? '';
-              final fourthOfficial = data['fourthOfficial'] ?? '';
-              final delegate = data['delegate'] ?? '';
-              final stadium = data['stadium'] ?? '';
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: context.appCardBackground,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: context.appBorder),
-                  boxShadow: context.appCardShadow,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              match,
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: context.appTextPrimary,
-                              ),
-                            ),
-                          ),
-                          if (league.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: context.appPrimary.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                league,
-                                style: TextStyle(
-                                  color: context.appPrimary,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (stadium.isNotEmpty) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Icon(Icons.location_on_outlined, size: 14, color: context.appTextSecondary),
-                            const SizedBox(width: 4),
-                            Text(stadium, style: TextStyle(color: context.appTextSecondary, fontSize: 12)),
-                          ],
-                        ),
-                      ],
-
-                      Divider(color: context.appBorder, height: 20),
-
-                      // Referees List
-                      _buildRefRow(context, 'حكم الساحة:', mainReferee, Icons.sports),
-                      if (assistant1.isNotEmpty)
-                        _buildRefRow(context, 'المساعد الأول:', assistant1, Icons.flag_outlined),
-                      if (assistant2.isNotEmpty)
-                        _buildRefRow(context, 'المساعد الثاني:', assistant2, Icons.flag_outlined),
-                      if (fourthOfficial.isNotEmpty)
-                        _buildRefRow(context, 'الحكم الرابع:', fourthOfficial, Icons.looks_4_outlined),
-                      if (delegate.isNotEmpty)
-                        _buildRefRow(context, 'محافظ اللقاء:', delegate, Icons.shield_outlined),
-                    ],
-                  ),
+            if (docs.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.sports, size: 70, color: context.appTextSecondary.withOpacity(0.4)),
+                    const SizedBox(height: 16),
+                    Text(
+                      'لا توجد تعيينات حكام منشورة حالياً',
+                      style: TextStyle(color: context.appTextSecondary, fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ],
                 ),
               );
-            },
-          );
-        },
-      ),
-    );
-  }
+            }
 
-  Widget _buildRefRow(BuildContext context, String label, String name, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: context.appPrimary),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(color: context.appTextSecondary, fontSize: 12.5),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              name,
-              style: TextStyle(fontWeight: FontWeight.bold, color: context.appTextPrimary, fontSize: 13),
-            ),
-          ),
-        ],
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: docs.length,
+              itemBuilder: (context, index) {
+                final data = docs[index];
+                final title = data['title'] ?? 'جدول تعيينات الحكام';
+                final date = data['created_at'] ?? '';
+                final fileUrl = data['file_url'] ?? data['download_url'];
+                final fileSize = data['file_size'] ?? '';
+                final fileExt = (data['file_ext'] ?? 'PDF').toString().toUpperCase();
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                    color: context.appCardBackground,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: context.appBorder),
+                    boxShadow: context.appCardShadow,
+                  ),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.sports, color: Colors.amber, size: 24),
+                    ),
+                    title: Text(
+                      title,
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.appTextPrimary),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              fileExt,
+                              style: TextStyle(color: Colors.amber.shade900, fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (fileSize.isNotEmpty) ...[
+                            Text(fileSize, style: TextStyle(color: context.appTextSecondary, fontSize: 11.5)),
+                            const SizedBox(width: 8),
+                          ],
+                          if (date.isNotEmpty)
+                            Text(date, style: TextStyle(color: context.appTextSecondary, fontSize: 11.5)),
+                        ],
+                      ),
+                    ),
+                    children: [
+                      Divider(color: context.appBorder, height: 20),
+                      if (fileUrl != null && fileUrl.isNotEmpty) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber.shade800,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.download, size: 20),
+                            label: const Text('تحميل جدول تعيينات الحكام', style: TextStyle(fontWeight: FontWeight.bold)),
+                            onPressed: () async {
+                              final uri = Uri.parse(fileUrl);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

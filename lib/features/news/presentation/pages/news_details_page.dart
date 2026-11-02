@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/widgets/app_image.dart';
 import '../../data/models/news_model.dart';
@@ -7,6 +9,118 @@ class NewsDetailsPage extends StatelessWidget {
   final NewsModel news;
   
   const NewsDetailsPage({super.key, required this.news});
+
+  static Future<void> launchLink(BuildContext context, String rawUrl) async {
+    final trimmed = rawUrl.trim();
+    if (trimmed.isEmpty) return;
+
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null) {
+      try {
+        final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (!ok && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تعذر فتح الرابط المطلوب')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('خطأ أثناء فتح الرابط: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  /// Converts HTML content to clean readable plain text while preserving structure
+  String _cleanContent(String raw) {
+    if (raw.isEmpty) return '';
+    var text = raw;
+    // Replace breaks and paragraphs with newlines
+    text = text.replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</p>', caseSensitive: false), '\n\n');
+    text = text.replaceAll(RegExp(r'</li>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</tr>', caseSensitive: false), '\n');
+    text = text.replaceAll(RegExp(r'</td>', caseSensitive: false), '  ');
+    // Strip all remaining HTML tags
+    text = text.replaceAll(RegExp(r'<[^>]*>'), '');
+    // Decode common HTML entities
+    text = text.replaceAll('&nbsp;', ' ')
+               .replaceAll('&amp;', '&')
+               .replaceAll('&quot;', '"')
+               .replaceAll('&apos;', "'")
+               .replaceAll('&gt;', '>')
+               .replaceAll('&lt;', '<');
+    // Normalize consecutive blank lines
+    text = text.replaceAll(RegExp(r'\n{3,}'), '\n\n');
+    return text.trim();
+  }
+
+  /// Builds a RichText with clickable links for any raw URLs inside the text
+  Widget _buildContentWithClickableLinks(BuildContext context, String text) {
+    final urlRegex = RegExp(r'(https?://[^\s]+)', caseSensitive: false);
+    final matches = urlRegex.allMatches(text);
+
+    if (matches.isEmpty) {
+      return Text(
+        text,
+        style: TextStyle(
+          fontSize: 15,
+          color: context.appTextPrimary,
+          height: 1.8,
+        ),
+      );
+    }
+
+    final spans = <TextSpan>[];
+    int lastMatchEnd = 0;
+
+    for (final match in matches) {
+      if (match.start > lastMatchEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastMatchEnd, match.start),
+          style: TextStyle(
+            fontSize: 15,
+            color: context.appTextPrimary,
+            height: 1.8,
+          ),
+        ));
+      }
+
+      final url = match.group(0)!;
+      spans.add(TextSpan(
+        text: url,
+        style: const TextStyle(
+          fontSize: 15,
+          color: Color(0xFF059669),
+          fontWeight: FontWeight.bold,
+          decoration: TextDecoration.underline,
+          height: 1.8,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () => launchLink(context, url),
+      ));
+
+      lastMatchEnd = match.end;
+    }
+
+    if (lastMatchEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastMatchEnd),
+        style: TextStyle(
+          fontSize: 15,
+          color: context.appTextPrimary,
+          height: 1.8,
+        ),
+      ));
+    }
+
+    return RichText(
+      textDirection: TextDirection.rtl,
+      text: TextSpan(children: spans),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +139,8 @@ class NewsDetailsPage extends StatelessWidget {
       final d = t.day.toString().padLeft(2, '0');
       dateStr = '${t.year}/$m/$d';
     }
+
+    final cleanedBody = _cleanContent(news.content);
 
     return Scaffold(
       backgroundColor: context.appBackground,
@@ -51,17 +167,18 @@ class NewsDetailsPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: context.appBorder),
                 boxShadow: context.appCardShadow,
-                color: catColor.withOpacity(0.1),
-                image: hasImage && getAppImageProvider(news.imageUrl) != null
-                    ? DecorationImage(
-                        image: getAppImageProvider(news.imageUrl)!,
-                        fit: BoxFit.cover,
-                      )
-                    : null,
+                color: catColor.withOpacity(0.08),
               ),
-              child: !hasImage || getAppImageProvider(news.imageUrl) == null
-                  ? Center(child: Icon(Icons.newspaper, size: 70, color: catColor.withOpacity(0.5)))
-                  : null,
+              clipBehavior: Clip.antiAlias,
+              child: hasImage
+                  ? AppImage(
+                      imageUrl: news.imageUrl,
+                      width: double.infinity,
+                      height: 220,
+                      fit: BoxFit.cover,
+                      fallback: Center(child: Icon(Icons.newspaper, size: 70, color: catColor.withOpacity(0.5))),
+                    )
+                  : Center(child: Icon(Icons.newspaper, size: 70, color: catColor.withOpacity(0.5))),
             ),
 
             const SizedBox(height: 18),
@@ -121,15 +238,140 @@ class NewsDetailsPage extends StatelessWidget {
                     child: Divider(color: context.appBorder, height: 1),
                   ),
 
-                  // نص الخبر
-                  Text(
-                    news.content,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: context.appTextPrimary,
-                      height: 1.8,
+                  // نص الخبر مع الروابط القابلة للنقر
+                  _buildContentWithClickableLinks(context, cleanedBody),
+
+                  // ── بطاقة الروابط والمستندات المرفقة (إن وجدت) ─────
+                  if (news.links.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF059669).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: const Color(0xFF059669).withOpacity(0.3),
+                          width: 1.2,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.attachment_rounded, size: 20, color: Color(0xFF059669)),
+                              SizedBox(width: 8),
+                              Text(
+                                'الروابط والمستندات المرفقة بالخبر',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF065F46),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...news.links.map((link) {
+                            final isPdf = link.isFile || link.url.toLowerCase().endsWith('.pdf');
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: InkWell(
+                                onTap: () => launchLink(context, link.url),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                                  decoration: BoxDecoration(
+                                    color: context.appCardBackground,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: context.appBorder),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.03),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: isPdf
+                                              ? Colors.red.withOpacity(0.12)
+                                              : const Color(0xFF059669).withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Icon(
+                                          isPdf ? Icons.picture_as_pdf_rounded : Icons.link_rounded,
+                                          size: 20,
+                                          color: isPdf ? Colors.red.shade700 : const Color(0xFF059669),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              link.title,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: context.appTextPrimary,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              link.url,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: context.appTextSecondary,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF059669),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            Text(
+                                              'فتح',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            SizedBox(width: 4),
+                                            Icon(Icons.open_in_new_rounded, size: 13, color: Colors.white),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

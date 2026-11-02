@@ -1,24 +1,71 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 
+/// Normalize any image URL or path coming from API / local storage / base64
+/// Ensures that relative paths or localhost URLs are correctly resolved to the production server.
+String resolveFullImageUrl(String? urlOrPath) {
+  if (urlOrPath == null || urlOrPath.trim().isEmpty) return '';
+  String trimmed = urlOrPath.trim();
+  if (trimmed.startsWith('data:image')) return trimmed;
+
+  // Replace any local or insecure domain variants
+  trimmed = trimmed
+      .replaceAll('http://localhost:8080', 'https://lrf-blida.dz')
+      .replaceAll('http://localhost', 'https://lrf-blida.dz')
+      .replaceAll('http://127.0.0.1:8080', 'https://lrf-blida.dz')
+      .replaceAll('http://127.0.0.1', 'https://lrf-blida.dz')
+      .replaceAll('http://lrf-blida.dz', 'https://lrf-blida.dz');
+
+  if (trimmed.startsWith('https://') || trimmed.startsWith('http://')) {
+    return trimmed;
+  }
+
+  // Handle relative paths
+  if (trimmed.startsWith('/storage/')) {
+    return 'https://lrf-blida.dz$trimmed';
+  }
+  if (trimmed.startsWith('storage/')) {
+    return 'https://lrf-blida.dz/$trimmed';
+  }
+  if (trimmed.startsWith('articles-images/') || trimmed.startsWith('articles/')) {
+    return 'https://lrf-blida.dz/storage/$trimmed';
+  }
+  if (trimmed.startsWith('/images/')) {
+    return 'https://lrf-blida.dz$trimmed';
+  }
+  if (trimmed.startsWith('images/')) {
+    return 'https://lrf-blida.dz/$trimmed';
+  }
+  if (trimmed.startsWith('/')) {
+    return 'https://lrf-blida.dz$trimmed';
+  }
+
+  return 'https://lrf-blida.dz/storage/$trimmed';
+}
+
+/// Returns an [ImageProvider] for either Base64 data or full remote URLs.
 ImageProvider? getAppImageProvider(String? urlOrBase64) {
-  if (urlOrBase64 == null || urlOrBase64.isEmpty) return null;
-  final trimmed = urlOrBase64.trim();
-  if (trimmed.startsWith('data:image')) {
+  if (urlOrBase64 == null || urlOrBase64.trim().isEmpty) return null;
+  final resolved = resolveFullImageUrl(urlOrBase64);
+
+  if (resolved.startsWith('data:image')) {
     try {
-      final commaIndex = trimmed.indexOf(',');
-      final base64Str = commaIndex != -1 ? trimmed.substring(commaIndex + 1) : trimmed;
+      final commaIndex = resolved.indexOf(',');
+      final base64Str = commaIndex != -1 ? resolved.substring(commaIndex + 1) : resolved;
       return MemoryImage(base64Decode(base64Str));
     } catch (_) {
       return null;
     }
   }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return NetworkImage(trimmed);
+
+  if (resolved.startsWith('http://') || resolved.startsWith('https://')) {
+    return NetworkImage(resolved);
   }
+
   return null;
 }
 
+/// Unified widget for displaying app images with caching, fallback, and rounded corners.
 class AppImage extends StatelessWidget {
   final String imageUrl;
   final double? width;
@@ -39,15 +86,16 @@ class AppImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty) {
+    final resolvedUrl = resolveFullImageUrl(imageUrl);
+    if (resolvedUrl.isEmpty) {
       return fallback ?? const SizedBox();
     }
 
     Widget imageWidget;
-    if (imageUrl.startsWith('data:image')) {
+    if (resolvedUrl.startsWith('data:image')) {
       try {
-        final commaIndex = imageUrl.indexOf(',');
-        final base64String = commaIndex != -1 ? imageUrl.substring(commaIndex + 1) : imageUrl;
+        final commaIndex = resolvedUrl.indexOf(',');
+        final base64String = commaIndex != -1 ? resolvedUrl.substring(commaIndex + 1) : resolvedUrl;
         imageWidget = Image.memory(
           base64Decode(base64String),
           width: width,
@@ -60,7 +108,7 @@ class AppImage extends StatelessWidget {
       }
     } else {
       imageWidget = Image.network(
-        imageUrl,
+        resolvedUrl,
         width: width,
         height: height,
         fit: fit,

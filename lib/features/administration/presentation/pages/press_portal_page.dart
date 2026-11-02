@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/theme_extensions.dart';
+import '../../../../core/network/api_client.dart';
 
 class PressPortalPage extends StatefulWidget {
   const PressPortalPage({super.key});
@@ -23,52 +23,111 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
   final TextEditingController _phoneCtrl = TextEditingController();
   final TextEditingController _emailCtrl = TextEditingController();
 
-  String _selectedLeague = 'جهوي أول';
+  String _selectedLeague = 'الكل';
   String? _selectedMatchId;
   Map<String, dynamic>? _selectedMatchData;
   String _selectedMediaType = 'صحافة مكتوبة';
   bool _isSubmitting = false;
+  bool _isLoadingMatches = false;
+  bool _isSearchingTrack = false;
   String? _photoBase64;
+  String? _documentBase64;
+
+  // Unified API Data
+  List<Map<String, dynamic>> _apiMatches = [];
+  List<Map<String, dynamic>> _apiTrackResults = [];
 
   // Tracking Tab
   final TextEditingController _trackingQueryCtrl = TextEditingController();
   String _activeSearchQuery = '';
 
-  Future<void> _pickJournalistPhoto() async {
+  Future<void> _pickPhoto({required bool isPersonalPhoto, required ImageSource source}) async {
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 400,
-        maxHeight: 400,
-        imageQuality: 70,
+        source: source,
+        maxWidth: isPersonalPhoto ? 600 : 1200,
+        maxHeight: isPersonalPhoto ? 600 : 1600,
+        imageQuality: 75,
       );
       if (picked != null) {
         final bytes = await picked.readAsBytes();
         setState(() {
-          _photoBase64 = base64Encode(bytes);
+          if (isPersonalPhoto) {
+            _photoBase64 = base64Encode(bytes);
+          } else {
+            _documentBase64 = base64Encode(bytes);
+          }
         });
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('تعذر اختيار الصورة: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('تعذر التقاط / اختيار الصورة: $e'), backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  final List<String> _leagues = [
-    'جهوي أول',
-    'جهوي ثاني فوج أ',
-    'جهوي ثاني فوج ب',
-    'فوج النخبة',
-    'المستوى الأول فوج أ',
-    'المستوى الأول فوج ب',
-    'المستوى الجهوي فوج أ',
-    'المستوى الجهوي فوج ب',
-    'المستوى الجهوي فوج ج',
-  ];
+  void _showImageSourceSheet({required bool isPersonalPhoto, required String title}) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const Icon(Icons.camera_alt, color: Colors.blue),
+                title: const Text('التقاط صورة بالكاميرا الآن (تصوير / سكان)'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickPhoto(isPersonalPhoto: isPersonalPhoto, source: ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.green),
+                title: const Text('اختيار صورة من معرض الصور'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickPhoto(isPersonalPhoto: isPersonalPhoto, source: ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> get _dynamicLeagues {
+    final list = <String>['الكل'];
+    final knownLeagues = [
+      'كأس الجزائر',
+      'الجهوي الأول',
+      'الجهوي الثاني - فوج أ',
+      'الجهوي الثاني - فوج ب',
+    ];
+    for (final k in knownLeagues) {
+      if (!list.contains(k)) list.add(k);
+    }
+    for (final m in _apiMatches) {
+      final l = (m['league'] ?? '').toString().trim();
+      if (l.isNotEmpty && !list.contains(l)) {
+        list.add(l);
+      }
+    }
+    return list;
+  }
 
   final List<String> _mediaTypes = [
     'صحافة مكتوبة',
@@ -83,6 +142,70 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadSavedCredentials();
+    _loadApiMatches();
+  }
+
+  Future<void> _loadApiMatches() async {
+    if (mounted) setState(() => _isLoadingMatches = true);
+    try {
+      final matches = await ApiClient().getAccreditationMatches();
+      if (mounted) {
+        setState(() {
+          _apiMatches = matches;
+          _isLoadingMatches = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMatches = false);
+    }
+  }
+
+  List<Map<String, dynamic>> _getFilteredMatches() {
+    if (_apiMatches.isEmpty) return [];
+    if (_selectedLeague == 'الكل') return _apiMatches;
+
+    return _apiMatches.where((m) {
+      final league = (m['league'] ?? '').toString();
+      final round = (m['round'] ?? '').toString();
+
+      if (_selectedLeague.contains('كأس') || _selectedLeague.contains('كاس')) {
+        return league.contains('كأس') || league.contains('كاس') || league.toLowerCase().contains('coupe') ||
+               round.contains('كأس') || round.contains('كاس') || round.toLowerCase().contains('coupe');
+      }
+      if (_selectedLeague.contains('أول')) {
+        return (league.contains('أول') || league.contains('الجهوي الأول')) &&
+               !league.contains('كأس') && !league.contains('كاس');
+      }
+      if (_selectedLeague.contains('فوج أ')) {
+        return (league.contains('فوج أ') || league.contains('2 أ')) &&
+               !league.contains('كأس') && !league.contains('كاس');
+      }
+      if (_selectedLeague.contains('فوج ب')) {
+        return (league.contains('فوج ب') || league.contains('2 ب')) &&
+               !league.contains('كأس') && !league.contains('كاس');
+      }
+      return league.contains(_selectedLeague) || _selectedLeague.contains(league);
+    }).toList();
+  }
+
+  Future<void> _searchTrackApi(String query) async {
+    final clean = query.trim();
+    if (clean.isEmpty) {
+      if (mounted) setState(() => _apiTrackResults = []);
+      return;
+    }
+    if (mounted) setState(() => _isSearchingTrack = true);
+    try {
+      final results = await ApiClient().trackAccreditations(clean);
+      if (mounted) {
+        setState(() {
+          _apiTrackResults = results;
+          _isSearchingTrack = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isSearchingTrack = false);
+    }
   }
 
   @override
@@ -110,6 +233,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
       if (lastPhone.isNotEmpty) {
         _trackingQueryCtrl.text = lastPhone;
         _activeSearchQuery = lastPhone;
+        _searchTrackApi(lastPhone);
       }
     });
   }
@@ -135,42 +259,78 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
       return;
     }
 
+    if (_photoBase64 == null || _photoBase64!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الصورة الشخصية للصحفي إلزامية! يرجى التقاطها بالكاميرا أو إرفاقها.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_documentBase64 == null || _documentBase64!.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('وثيقة الاعتماد الرسمي من النادي أو البطاقة المهنية إلزامية! يرجى تصويرها أو إرفاقها.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
 
     try {
-      final refCode = 'LRF-PRESS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      final matchTitle = '${_selectedMatchData!['team1']} ضد ${_selectedMatchData!['team2']}';
+      String refCode = 'LRF-PRESS-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      final matchTitle = _selectedMatchData!['match_title'] ?? '${_selectedMatchData!['team1']} ضد ${_selectedMatchData!['team2']}';
 
-      await FirebaseFirestore.instance.collection('media_accreditations').add({
-        'referenceCode': refCode,
-        'journalistName': _nameCtrl.text.trim(),
-        'mediaOutlet': _mediaOutletCtrl.text.trim(),
-        'mediaType': _selectedMediaType,
-        'pressCardNumber': _cardNumCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
-        'photoBase64': _photoBase64 ?? '',
-        'league': _selectedLeague,
-        'matchId': _selectedMatchId,
-        'matchTitle': matchTitle,
-        'matchDate': '${_selectedMatchData!['date'] ?? ''} ${_selectedMatchData!['time'] ?? ''}'.trim(),
-        'stadium': _selectedMatchData!['stadium'] ?? 'الملعب الرسمي',
-        'round': _selectedMatchData!['round'] ?? '',
-        'status': 'pending',
-        'adminNote': '',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // Submit to Unified Laravel Website API
+      try {
+        final apiRes = await ApiClient().submitAccreditation({
+          'journalist_name': _nameCtrl.text.trim(),
+          'media_outlet': _mediaOutletCtrl.text.trim(),
+          'media_type': _selectedMediaType,
+          'press_card_number': _cardNumCtrl.text.trim(),
+          'phone': _phoneCtrl.text.trim(),
+          'email': _emailCtrl.text.trim(),
+          'photo_base64': _photoBase64 ?? '',
+          'document_base64': _documentBase64 ?? '',
+          'match_id': _selectedMatchId,
+          'match_title': matchTitle,
+          'match_date': '${_selectedMatchData!['date'] ?? ''} ${_selectedMatchData!['time'] ?? ''}'.trim(),
+          'stadium': _selectedMatchData!['stadium'] ?? 'الملعب الرسمي',
+          'league': _selectedMatchData!['league'] ?? _selectedLeague,
+          'round': _selectedMatchData!['round'] ?? '',
+        });
+        if (apiRes != null && apiRes['status'] == 'error') {
+          if (mounted) {
+            setState(() => _isSubmitting = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(apiRes['message'] ?? 'فشل إرسال الطلب'), backgroundColor: Colors.red),
+            );
+          }
+          return;
+        }
+        if (apiRes != null && apiRes['data'] != null && apiRes['data']['reference_code'] != null) {
+          refCode = apiRes['data']['reference_code'].toString();
+        }
+      } catch (e) {
+        debugPrint('Accreditation API submit error: $e');
+      }
 
       await _saveCredentials();
 
       if (!mounted) return;
 
-      // Update tracking query and reset photo
+      // Update tracking query and reset photo & document
       setState(() {
         _activeSearchQuery = _phoneCtrl.text.trim();
         _trackingQueryCtrl.text = _phoneCtrl.text.trim();
         _photoBase64 = null;
+        _documentBase64 = null;
       });
+      _searchTrackApi(_phoneCtrl.text.trim());
 
       showDialog(
         context: context,
@@ -188,7 +348,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('تم تسجيل طلب الاعتماد الخاص بكم لدى خلية الإعلام بالرابطة.'),
+              const Text('تم تسجيل طلب الاعتماد الخاص بكم لدى خلية الإعلام بالرابطة بنجاح عبر النظام الرقمي الموحد.'),
               const SizedBox(height: 12),
               Container(
                 width: double.infinity,
@@ -244,8 +404,8 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
   }
 
   void _showDigitalBadgeDialog(Map<String, dynamic> data) {
-    final ref = data['referenceCode'] ?? 'LRF-PASS';
-    final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LRF-ACCREDITATION-$ref';
+    final ref = data['referenceCode'] ?? data['reference_code'] ?? 'LRF-PASS';
+    final qrUrl = data['qrCodeUrl'] ?? 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LRF-ACCREDITATION-$ref';
 
     showDialog(
       context: context,
@@ -304,13 +464,13 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                   child: Column(
                     children: [
                       Text(
-                        data['matchTitle'] ?? '',
+                        data['matchTitle'] ?? data['match_title'] ?? '',
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.black87),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${data['league'] ?? ''} ${data['round'] ?? ''}'.trim(),
+                        '${data['league'] ?? data['league_name'] ?? ''} ${data['round'] ?? ''}'.trim(),
                         style: const TextStyle(color: Colors.grey, fontSize: 13),
                       ),
                       const SizedBox(height: 12),
@@ -339,7 +499,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                                 const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
                                 const SizedBox(width: 6),
                                 Expanded(
-                                  child: Text('التاريخ: ${data['matchDate'] ?? ''}', style: const TextStyle(fontSize: 12)),
+                                  child: Text('التاريخ: ${data['matchDate'] ?? data['match_date'] ?? ''}', style: const TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
@@ -355,7 +515,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if ((data['photoBase64'] ?? '').toString().isNotEmpty)
+                          if ((data['photoBase64'] ?? data['photo_path'] ?? '').toString().isNotEmpty && !(data['photoBase64'] ?? data['photo_path'] ?? '').toString().startsWith('http'))
                             Container(
                               width: 65,
                               height: 80,
@@ -367,7 +527,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
                                 child: Image.memory(
-                                  base64Decode(data['photoBase64']),
+                                  base64Decode((data['photoBase64'] ?? data['photo_path']).toString()),
                                   fit: BoxFit.cover,
                                   errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 36, color: Colors.grey),
                                 ),
@@ -378,13 +538,13 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('الاسم واللقب:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                Text(data['journalistName'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                Text(data['journalistName'] ?? data['journalist_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                                 const SizedBox(height: 6),
                                 const Text('المؤسسة الإعلامية:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                Text(data['mediaOutlet'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1B7A36))),
+                                Text(data['mediaOutlet'] ?? data['media_outlet'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1B7A36))),
                                 const SizedBox(height: 6),
                                 const Text('رقم البطاقة المهنية:', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                                Text(data['pressCardNumber'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                Text(data['pressCardNumber'] ?? data['press_card_number'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                               ],
                             ),
                           ),
@@ -414,7 +574,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                         ],
                       ),
 
-                      if ((data['adminNote'] ?? '').toString().isNotEmpty) ...[
+                      if ((data['adminNote'] ?? data['admin_note'] ?? '').toString().isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Container(
                           width: double.infinity,
@@ -425,7 +585,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                             border: Border.all(color: Colors.orange.shade200),
                           ),
                           child: Text(
-                            'ملاحظة: ${data['adminNote']}',
+                            'ملاحظة: ${data['adminNote'] ?? data['admin_note']}',
                             style: TextStyle(color: Colors.orange.shade900, fontSize: 11),
                           ),
                         ),
@@ -447,7 +607,7 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'تم إرسال نسخة الاعتماد رسمياً إلى بريدك الإلكتروني من قبل إدارة الرابطة.',
+                                'تم اعتماد طلبكم رسمياً من قبل خلية الإعلام بالرابطة.',
                                 style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -517,6 +677,8 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
   // Tab 1: تقديم طلب اعتماد جديد
   // ══════════════════════════════════════════════════════════════
   Widget _buildNewRequestTab() {
+    final filteredMatches = _getFilteredMatches();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Form(
@@ -534,22 +696,12 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
               ),
               child: Row(
                 children: [
-                  Icon(Icons.newspaper, color: context.appPrimary, size: 28),
-                  const SizedBox(width: 12),
+                  Icon(Icons.info_outline, color: context.appPrimary, size: 24),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'اعتمادات تغطية مباريات الرابطة',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.appTextPrimary),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'اختر القسم والمباراة وأدخل بياناتك للحصول على بطاقة الاعتماد الرقمية.',
-                          style: TextStyle(fontSize: 12, color: context.appTextSecondary),
-                        ),
-                      ],
+                    child: Text(
+                      'مرحباً بأسرة الإعلام الوطني. يرجى اختيار المباراة وملء بياناتكم الرسمية للحصول على بطاقة التغطية الصحفية المعتمدة.',
+                      style: TextStyle(fontSize: 13, color: context.appTextPrimary, height: 1.4),
                     ),
                   ),
                 ],
@@ -557,8 +709,8 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
             ),
             const SizedBox(height: 20),
 
-            // 1. اختيار القسم
-            Text('1. اختيار القسم / البطولة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+            // 1. اختيار البطولة
+            Text('1. تصفية حسب القسم / البطولة:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -569,9 +721,9 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: _selectedLeague,
+                  value: _dynamicLeagues.contains(_selectedLeague) ? _selectedLeague : 'الكل',
                   isExpanded: true,
-                  items: _leagues.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
+                  items: _dynamicLeagues.map((l) => DropdownMenuItem(value: l, child: Text(l))).toList(),
                   onChanged: (val) {
                     if (val != null) {
                       setState(() {
@@ -587,73 +739,73 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
             const SizedBox(height: 16),
 
             // 2. اختيار المباراة
-            Text('2. اختيار المباراة المراد تغطيتها:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
-            const SizedBox(height: 8),
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('matches')
-                  .where('league', isEqualTo: _selectedLeague)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
-                }
-
-                final docs = snapshot.data?.docs ?? [];
-                if (docs.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: context.appCardBackground,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: context.appBorder),
-                    ),
-                    child: Text(
-                      'لا توجد مباريات مسجلة حالياً في قسم $_selectedLeague.',
-                      style: TextStyle(color: context.appTextSecondary, fontSize: 13),
-                    ),
-                  );
-                }
-
-                final matchItems = docs.map((d) {
-                  final data = d.data() as Map<String, dynamic>;
-                  final title = '${data['team1']} ضد ${data['team2']} (${data['round'] ?? 'مباراة'})';
-                  return {'id': d.id, 'title': title, 'data': data};
-                }).toList();
-
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: context.appCardBackground,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: context.appBorder),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      hint: const Text('اضغط لاختيار المباراة'),
-                      value: _selectedMatchId,
-                      isExpanded: true,
-                      items: matchItems.map((m) {
-                        return DropdownMenuItem<String>(
-                          value: m['id'] as String,
-                          child: Text(m['title'] as String, overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          final selected = matchItems.firstWhere((m) => m['id'] == val);
-                          setState(() {
-                            _selectedMatchId = val;
-                            _selectedMatchData = selected['data'] as Map<String, dynamic>;
-                          });
-                        }
-                      },
-                    ),
-                  ),
-                );
-              },
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('2. اختيار المباراة المراد تغطيتها:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+                IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: 'تحديث قائمة المباريات',
+                  onPressed: _loadApiMatches,
+                ),
+              ],
             ),
+            const SizedBox(height: 4),
+
+            if (_isLoadingMatches)
+              const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()))
+            else if (filteredMatches.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: context.appCardBackground,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.appBorder),
+                ),
+                child: Text(
+                  'لا توجد مباريات مبرمجة حالياً في قسم $_selectedLeague.',
+                  style: TextStyle(color: context.appTextSecondary, fontSize: 13),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: context.appCardBackground,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.appBorder),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    hint: const Text('اضغط لاختيار المباراة'),
+                    value: _selectedMatchId,
+                    isExpanded: true,
+                    items: filteredMatches.map((m) {
+                      final leagueName = (m['league'] ?? '').toString();
+                      final isCup = leagueName.contains('كأس') || leagueName.contains('كاس') || leagueName.toLowerCase().contains('coupe');
+                      final prefix = isCup ? '🏆 [كأس الجزائر] ' : '';
+                      final roundTag = (m['round'] != null && m['round'].toString().isNotEmpty && !m['round'].toString().contains('رسمية')) 
+                          ? ' - ${m['round']}' 
+                          : '';
+                      final title = '$prefix${m['match_title'] ?? "${m['team1']} ضد ${m['team2']}"}$roundTag (${m['date'] ?? ''})';
+                      return DropdownMenuItem<String>(
+                        value: m['id'].toString(),
+                        child: Text(title, overflow: TextOverflow.ellipsis),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        final selected = filteredMatches.firstWhere((m) => m['id'].toString() == val);
+                        setState(() {
+                          _selectedMatchId = val;
+                          _selectedMatchData = selected;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
 
             // ── Auto Match Details Card ───────────────────────────
             if (_selectedMatchData != null) ...[
@@ -666,93 +818,45 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                   border: Border.all(color: context.appPrimary.withOpacity(0.35), width: 1.5),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      color: context.appPrimary.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
                     )
                   ],
                 ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
                             color: context.appPrimary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(6),
+                            shape: BoxShape.circle,
                           ),
-                          child: Text(
-                            '${_selectedMatchData!['league'] ?? ''} - ${_selectedMatchData!['round'] ?? ''}',
-                            style: TextStyle(color: context.appPrimary, fontWeight: FontWeight.bold, fontSize: 12),
-                          ),
+                          child: Icon(Icons.sports_soccer, color: context.appPrimary, size: 20),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.orange.shade200),
-                          ),
+                        const SizedBox(width: 8),
+                        Expanded(
                           child: Text(
-                            _selectedMatchData!['status'] ?? 'لم تبدأ',
-                            style: TextStyle(color: Colors.orange.shade900, fontSize: 11, fontWeight: FontWeight.bold),
+                            _selectedMatchData!['match_title'] ?? '${_selectedMatchData!['team1']} ضد ${_selectedMatchData!['team2']}',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: context.appTextPrimary),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            children: [
-                              const Icon(Icons.shield, size: 36, color: Color(0xFF1B7A36)),
-                              const SizedBox(height: 4),
-                              Text(
-                                _selectedMatchData!['team1'] ?? '',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text('VS', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14)),
-                        ),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              const Icon(Icons.shield_outlined, size: 36, color: Color(0xFFE8681A)),
-                              const SizedBox(height: 4),
-                              Text(
-                                _selectedMatchData!['team2'] ?? '',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
+                    const Divider(height: 1),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
-                        const Icon(Icons.stadium, size: 16, color: Colors.green),
+                        Icon(Icons.stadium_outlined, size: 16, color: context.appTextSecondary),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            'الملعب: ${_selectedMatchData!['stadium'] ?? 'ملعب معتمد من الرابطة'}',
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            'الملعب: ${_selectedMatchData!['stadium'] ?? 'الملعب الرسمي'}',
+                            style: TextStyle(fontSize: 12.5, color: context.appTextSecondary),
                           ),
                         ),
                       ],
@@ -760,18 +864,23 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                        Icon(Icons.event_outlined, size: 16, color: context.appTextSecondary),
                         const SizedBox(width: 6),
                         Text(
-                          'التاريخ: ${_selectedMatchData!['date'] ?? 'محدد لاحقاً'}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          'الموعد: ${_selectedMatchData!['date'] ?? ''} ${_selectedMatchData!['time'] ?? ''}'.trim(),
+                          style: TextStyle(fontSize: 12.5, color: context.appTextSecondary),
                         ),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.access_time, size: 16, color: Colors.orange),
-                        const SizedBox(width: 6),
-                        Text(
-                          'التوقيت: ${_selectedMatchData!['time'] ?? '15:00'}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: context.appPrimary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _selectedMatchData!['round'] ?? 'مباراة رسمية',
+                            style: TextStyle(color: context.appPrimary, fontWeight: FontWeight.bold, fontSize: 11),
+                          ),
                         ),
                       ],
                     ),
@@ -780,17 +889,183 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
               ),
             ],
 
-            const SizedBox(height: 24),
-            // 3. بيانات الصحفي
-            Text('3. بيانات الصحفي / الهيئة الإعلامية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+            const SizedBox(height: 20),
+
+            // 3. نوع الوسيلة الإعلامية
+            Text('3. نوع الوسيلة الإعلامية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: context.appCardBackground,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.appBorder),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedMediaType,
+                  isExpanded: true,
+                  items: _mediaTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedMediaType = val);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 4. الصورة الشخصية للصحفي (إلزامي)
+            Row(
+              children: [
+                Text('4. الصورة الشخصية للصحفي:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+                const SizedBox(width: 6),
+                const Text('*(إلزامي)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => _showImageSourceSheet(
+                isPersonalPhoto: true,
+                title: 'إرفاق الصورة الشخصية للصحفي (كاميرا أو معرض)',
+              ),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: context.appCardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _photoBase64 != null ? Colors.green : Colors.red.withOpacity(0.5),
+                    width: _photoBase64 != null ? 1.8 : 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    if (_photoBase64 != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          base64Decode(_photoBase64!),
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text('تم إرفاق الصورة الشخصية بنجاح ✓', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13)),
+                            Text('اضغط للتعديل أو التقاط صورة جديدة', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => _photoBase64 = null),
+                      ),
+                    ] else ...[
+                      const Icon(Icons.add_a_photo_outlined, color: Colors.redAccent, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('التقاط بالكاميرا أو اختيار الصورة الشخصية *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.appTextPrimary)),
+                            Text('إلزامية لتثبيتها في بطاقة الدخول الصحفية (PRESS PASS)', style: TextStyle(color: context.appTextSecondary, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.touch_app_outlined, color: Colors.grey, size: 20),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // 5. وثيقة الاعتماد الرسمي من النادي أو البطاقة المهنية (إلزامي)
+            Row(
+              children: [
+                Text('5. الاعتماد الرسمي من النادي أو البطاقة المهنية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
+                const SizedBox(width: 6),
+                const Text('*(إلزامي)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.red)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            GestureDetector(
+              onTap: () => _showImageSourceSheet(
+                isPersonalPhoto: false,
+                title: 'تصوير أو إرفاق وثيقة الاعتماد / البطاقة المهنية',
+              ),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: context.appCardBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _documentBase64 != null ? Colors.green : Colors.red.withOpacity(0.5),
+                    width: _documentBase64 != null ? 1.8 : 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    if (_documentBase64 != null) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(
+                          base64Decode(_documentBase64!),
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: const [
+                            Text('تم إرفاق الوثيقة / بطاقة الصحافة بنجاح ✓', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13)),
+                            Text('اضغط لإعادة التصوير أو التغيير', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.red),
+                        onPressed: () => setState(() => _documentBase64 = null),
+                      ),
+                    ] else ...[
+                      const Icon(Icons.document_scanner_outlined, color: Colors.redAccent, size: 28),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('تصوير أو سكان لوثيقة النادي أو بطاقة الصحافة *', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: context.appTextPrimary)),
+                            Text('بدونها لا يمكن قبول طلب الاعتماد من طرف إدارة الرابطة', style: TextStyle(color: context.appTextSecondary, fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.touch_app_outlined, color: Colors.grey, size: 20),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // 6. البيانات الشخصية
+            Text('6. البيانات الشخصية والمهنية:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.appTextPrimary)),
             const SizedBox(height: 12),
 
             TextFormField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'الاسم واللقب الكامل *',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'الاسم واللقب *',
+                prefixIcon: const Icon(Icons.person_outline),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
               validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال الاسم واللقب' : null,
             ),
@@ -798,142 +1073,45 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
 
             TextFormField(
               controller: _mediaOutletCtrl,
-              decoration: const InputDecoration(
-                labelText: 'المؤسسة الإعلامية / الموقع / القناة *',
-                prefixIcon: Icon(Icons.business),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'المؤسسة الإعلامية أو الموقع *',
+                prefixIcon: const Icon(Icons.business_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال اسم المؤسسة الإعلامية' : null,
-            ),
-            const SizedBox(height: 12),
-
-            DropdownButtonFormField<String>(
-              value: _selectedMediaType,
-              decoration: const InputDecoration(
-                labelText: 'نوع الوسيلة / الصفة',
-                prefixIcon: Icon(Icons.category),
-                border: OutlineInputBorder(),
-              ),
-              items: _mediaTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedMediaType = val);
-              },
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال اسم الوسيلة الإعلامية' : null,
             ),
             const SizedBox(height: 12),
 
             TextFormField(
               controller: _cardNumCtrl,
-              decoration: const InputDecoration(
-                labelText: 'رقم بطاقة الصحافة المهنية / الوطنية *',
-                prefixIcon: Icon(Icons.credit_card),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'رقم البطاقة المهنية / بطاقة الصحافة *',
+                prefixIcon: const Icon(Icons.badge_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال رقم بطاقة الصحافة' : null,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال رقم البطاقة المهنية' : null,
             ),
             const SizedBox(height: 12),
 
             TextFormField(
               controller: _phoneCtrl,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'رقم الهاتف للتواصل ومتابعة الطلب *',
-                prefixIcon: Icon(Icons.phone),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: 'رقم الهاتف للاتصال ومتابعة الطلب *',
+                prefixIcon: const Icon(Icons.phone_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              validator: (v) => (v == null || v.trim().length < 9) ? 'يرجى إدخال رقم هاتف صحيح' : null,
+              validator: (v) => (v == null || v.trim().isEmpty) ? 'يرجى إدخال رقم الهاتف' : null,
             ),
             const SizedBox(height: 12),
 
             TextFormField(
               controller: _emailCtrl,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'البريد الإلكتروني لاستلام نسخة الاعتماد *',
-                prefixIcon: Icon(Icons.email),
-                border: OutlineInputBorder(),
-              ),
-              validator: (v) => (v == null || !v.contains('@')) ? 'يرجى إدخال بريد إلكتروني صحيح' : null,
-            ),
-            const SizedBox(height: 14),
-
-            // Photo Upload
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.appCardBackground,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.appBorder),
-              ),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _pickJournalistPhoto,
-                    child: Container(
-                      width: 65,
-                      height: 75,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: context.appPrimary.withOpacity(0.5), width: 1.5),
-                      ),
-                      child: _photoBase64 != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.memory(
-                                base64Decode(_photoBase64!),
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_a_photo, color: context.appPrimary, size: 24),
-                                const SizedBox(height: 4),
-                                const Text('الصورة', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                              ],
-                            ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'الصورة الشخصية للصحفي (اختياري)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'تظهر الصورة في بطاقة الاعتماد الرقمية PRESS PASS عند القبول.',
-                          style: TextStyle(fontSize: 11, color: context.appTextSecondary),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              icon: const Icon(Icons.photo_library, size: 16),
-                              label: Text(_photoBase64 != null ? 'تغيير الصورة' : 'اختيار صورة', style: const TextStyle(fontSize: 12)),
-                              onPressed: _pickJournalistPhoto,
-                            ),
-                            if (_photoBase64 != null) ...[
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                                tooltip: 'إزالة الصورة',
-                                onPressed: () => setState(() => _photoBase64 = null),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              decoration: InputDecoration(
+                labelText: 'البريد الإلكتروني (لتلقي نسخة الاعتماد)',
+                prefixIcon: const Icon(Icons.email_outlined),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
               ),
             ),
             const SizedBox(height: 24),
@@ -941,23 +1119,23 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
             // Submit Button
             SizedBox(
               width: double.infinity,
-              height: 52,
+              height: 50,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: context.appPrimary,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
+                onPressed: _isSubmitting ? null : _submitRequest,
                 icon: _isSubmitting
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Icon(Icons.send, color: Colors.white),
                 label: Text(
-                  _isSubmitting ? 'جاري إرسال الطلب...' : 'إرسال طلب الاعتماد',
+                  _isSubmitting ? 'جاري إرسال الطلب...' : 'إرسال طلب الاعتماد رسميـاً',
                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
-                onPressed: _isSubmitting ? null : _submitRequest,
               ),
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -965,14 +1143,15 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
   }
 
   // ══════════════════════════════════════════════════════════════
-  // Tab 2: متابعة طلباتي وبطاقة الاعتماد
+  // Tab 2: متابعة الطلبات والبطاقة الرقمية
   // ══════════════════════════════════════════════════════════════
   Widget _buildTrackingTab() {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Search input
+          // Search Box
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -991,7 +1170,11 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    onSubmitted: (v) => setState(() => _activeSearchQuery = v.trim()),
+                    onSubmitted: (v) {
+                      final q = v.trim();
+                      setState(() => _activeSearchQuery = q);
+                      _searchTrackApi(q);
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -1001,7 +1184,9 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                   onPressed: () {
-                    setState(() => _activeSearchQuery = _trackingQueryCtrl.text.trim());
+                    final q = _trackingQueryCtrl.text.trim();
+                    setState(() => _activeSearchQuery = q);
+                    _searchTrackApi(q);
                   },
                   child: const Text('بحث', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 ),
@@ -1026,162 +1211,144 @@ class _PressPortalPageState extends State<PressPortalPage> with SingleTickerProv
                       ],
                     ),
                   )
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('media_accreditations')
-                        .orderBy('createdAt', descending: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return Center(child: CircularProgressIndicator(color: context.appPrimary));
-                      }
-
-                      final allDocs = snapshot.data?.docs ?? [];
-                      final query = _activeSearchQuery.toLowerCase();
-                      final results = allDocs.where((doc) {
-                        final data = doc.data() as Map<String, dynamic>;
-                        final phone = (data['phone'] ?? '').toString();
-                        final ref = (data['referenceCode'] ?? '').toString().toLowerCase();
-                        return phone.contains(query) || ref.contains(query);
-                      }).toList();
-
-                      if (results.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.folder_off, size: 64, color: context.appTextSecondary.withOpacity(0.4)),
-                              const SizedBox(height: 12),
-                              Text(
-                                'لم يتم العثور على أي طلب اعتماد بهذا الرقم أو المرجع.',
-                                style: TextStyle(color: context.appTextSecondary, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        );
-                      }
-
-                      return ListView.separated(
-                        itemCount: results.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final data = results[index].data() as Map<String, dynamic>;
-                          final status = data['status'] ?? 'pending';
-
-                          Color statusColor = Colors.orange;
-                          String statusText = 'قيد المراجعة من طرف الرابطة';
-                          IconData statusIcon = Icons.hourglass_top;
-
-                          if (status == 'approved') {
-                            statusColor = Colors.green;
-                            statusText = 'تم قبول الاعتماد رسميـاً 🎉';
-                            statusIcon = Icons.verified;
-                          } else if (status == 'rejected') {
-                            statusColor = Colors.red;
-                            statusText = 'تم رفض الطلب';
-                            statusIcon = Icons.cancel;
-                          }
-
-                          return Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: context.appCardBackground,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: statusColor.withOpacity(0.4)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.03),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                )
-                              ],
-                            ),
+                : _isSearchingTrack
+                    ? Center(child: CircularProgressIndicator(color: context.appPrimary))
+                    : _apiTrackResults.isEmpty
+                        ? Center(
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Status Banner
-                                Row(
-                                  children: [
-                                    Icon(statusIcon, color: statusColor, size: 20),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      statusText,
-                                      style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14),
-                                    ),
-                                    const Spacer(),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        data['referenceCode'] ?? '',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                Icon(Icons.folder_off, size: 64, color: context.appTextSecondary.withOpacity(0.4)),
                                 const SizedBox(height: 12),
-
-                                // Match Title
                                 Text(
-                                  data['matchTitle'] ?? '',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  'لم يتم العثور على أي طلب اعتماد بهذا الرقم أو المرجع.',
+                                  style: TextStyle(color: context.appTextSecondary, fontSize: 14),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${data['league'] ?? ''} | الملعب: ${data['stadium'] ?? 'غير محدد'}',
-                                  style: TextStyle(color: context.appTextSecondary, fontSize: 12),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'التاريخ: ${data['matchDate'] ?? ''}',
-                                  style: TextStyle(color: context.appTextSecondary, fontSize: 12),
-                                ),
-
-                                if ((data['adminNote'] ?? '').toString().isNotEmpty) ...[
-                                  const SizedBox(height: 10),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withOpacity(0.08),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      'ملاحظة الإدارة: ${data['adminNote']}',
-                                      style: TextStyle(color: statusColor, fontSize: 12),
-                                    ),
-                                  ),
-                                ],
-
-                                if (status == 'approved') ...[
-                                  const SizedBox(height: 14),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 44,
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      icon: const Icon(Icons.badge, color: Colors.white, size: 20),
-                                      label: const Text(
-                                        'عرض بطاقة الاعتماد الرقمية (PRESS PASS)',
-                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                      ),
-                                      onPressed: () => _showDigitalBadgeDialog(data),
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () => _searchTrackApi(_activeSearchQuery),
+                            child: ListView.separated(
+                              itemCount: _apiTrackResults.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 14),
+                              itemBuilder: (context, index) {
+                                final data = _apiTrackResults[index];
+                                final status = data['status'] ?? 'pending';
+
+                                Color statusColor = Colors.orange;
+                                String statusText = 'قيد المراجعة من طرف الرابطة';
+                                IconData statusIcon = Icons.hourglass_top;
+
+                                if (status == 'approved' || status == 'مقبول') {
+                                  statusColor = Colors.green;
+                                  statusText = 'تم قبول الاعتماد رسميـاً 🎉';
+                                  statusIcon = Icons.verified;
+                                } else if (status == 'rejected' || status == 'مرفوض') {
+                                  statusColor = Colors.red;
+                                  statusText = 'تم رفض الطلب';
+                                  statusIcon = Icons.cancel;
+                                }
+
+                                return Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: context.appCardBackground,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: statusColor.withOpacity(0.4)),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.03),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      )
+                                    ],
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Status Banner
+                                      Row(
+                                        children: [
+                                          Icon(statusIcon, color: statusColor, size: 20),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            statusText,
+                                            style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                          ),
+                                          const Spacer(),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              data['referenceCode'] ?? data['reference_code'] ?? '',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.black87),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+
+                                      // Match Title
+                                      Text(
+                                        data['matchTitle'] ?? data['match_title'] ?? '',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: context.appTextPrimary),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        '${data['league'] ?? data['league_name'] ?? ''} | الملعب: ${data['stadium'] ?? 'غير محدد'}',
+                                        style: TextStyle(color: context.appTextSecondary, fontSize: 12),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'التاريخ: ${data['matchDate'] ?? data['match_date'] ?? ''}',
+                                        style: TextStyle(color: context.appTextSecondary, fontSize: 12),
+                                      ),
+
+                                      if ((data['adminNote'] ?? data['admin_note'] ?? '').toString().isNotEmpty) ...[
+                                        const SizedBox(height: 10),
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withOpacity(0.08),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            'ملاحظة الإدارة: ${data['adminNote'] ?? data['admin_note']}',
+                                            style: TextStyle(color: statusColor, fontSize: 12),
+                                          ),
+                                        ),
+                                      ],
+
+                                      if (status == 'approved' || status == 'مقبول') ...[
+                                        const SizedBox(height: 14),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 44,
+                                          child: ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.green,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            icon: const Icon(Icons.badge, color: Colors.white, size: 20),
+                                            label: const Text(
+                                              'عرض بطاقة الاعتماد الرقمية (PRESS PASS)',
+                                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                            ),
+                                            onPressed: () => _showDigitalBadgeDialog(data),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
           ),
         ],
       ),

@@ -3,7 +3,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_cubit.dart';
-import 'features/home/presentation/pages/home_page.dart';
 import 'features/splash/presentation/pages/splash_page.dart';
 import 'features/news/data/repositories/news_repository.dart';
 import 'features/news/presentation/cubit/news_cubit.dart';
@@ -15,6 +14,7 @@ import 'features/favorites/presentation/cubit/favorites_cubit.dart';
 
 import 'core/widgets/club_logo_widget.dart';
 import 'core/services/analytics_service.dart';
+import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +36,9 @@ void main() async {
 
   // تتبع إحصائيات التثبيت والزيارات تلقائياً
   AnalyticsService.trackAppOpen();
+
+  // تفعيل خدمة الإشعارات والتنبيهات المباشرة من الموقع (بدون فايربيز)
+  await NotificationService.init();
 
   runApp(const RabitatiApp());
 }

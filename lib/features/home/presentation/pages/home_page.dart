@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/theme/theme_cubit.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/utils/in_app_notification.dart';
 import '../../../notifications/presentation/pages/notifications_page.dart';
+import '../../../news/data/repositories/news_repository.dart';
 import 'home_tab.dart';
 import '../../../competitions/presentation/pages/explore_page.dart';
 import '../../../match_details/presentation/pages/results_page.dart';
@@ -26,7 +25,7 @@ class _HomePageState extends State<HomePage> {
   int _currentIndex = 0;
   int _unreadNotificationsCount = 0;
   int _lastReadTimestamp = 0;
-  StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _notificationSubscription;
   bool _isInitialLoad = true;
 
   final List<Widget> _pages = [
@@ -55,42 +54,32 @@ class _HomePageState extends State<HomePage> {
     final prefs = await SharedPreferences.getInstance();
     _lastReadTimestamp = prefs.getInt('last_read_notifications_timestamp') ?? 0;
 
-    _notificationSubscription = FirebaseFirestore.instance
-        .collection('notifications')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .listen((snapshot) {
+    _notificationSubscription = NewsRepository().getUrgentNewsStream().listen((items) {
       int count = 0;
-      for (var doc in snapshot.docs) {
-        final data = doc.data();
-        final timestamp = data['timestamp'];
-        if (timestamp is Timestamp) {
-          final timeMs = timestamp.millisecondsSinceEpoch;
-          if (timeMs > _lastReadTimestamp) {
-            count++;
-          }
+      for (var item in items) {
+        final createdAt = item['created_at'];
+        int timeMs = 0;
+        if (createdAt != null) {
+          timeMs = DateTime.tryParse(createdAt.toString())?.millisecondsSinceEpoch ?? 0;
+        }
+        if (timeMs > _lastReadTimestamp) {
+          count++;
         }
       }
 
-      if (!_isInitialLoad && mounted) {
-        for (var change in snapshot.docChanges) {
-          if (change.type == DocumentChangeType.added) {
-            final data = change.doc.data() as Map<String, dynamic>?;
-            if (data != null) {
-              final title = data['title'] ?? 'تنبيه جديد';
-              final body = data['body'] ?? '';
-              final type = data['type'] ?? 'عاجل';
+      if (!_isInitialLoad && mounted && items.isNotEmpty) {
+        final first = items.first;
+        final title = first['title'] ?? 'تنبيه جديد';
+        final body = first['excerpt'] ?? first['content'] ?? '';
+        final type = first['category_name'] ?? 'عاجل';
 
-              InAppNotification.show(
-                context,
-                title: title,
-                body: body,
-                type: type,
-                onTap: () => _openNotificationsPage(),
-              );
-            }
-          }
-        }
+        InAppNotification.show(
+          context,
+          title: title,
+          body: body,
+          type: type,
+          onTap: () => _openNotificationsPage(),
+        );
       }
 
       _isInitialLoad = false;

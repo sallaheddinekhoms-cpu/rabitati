@@ -1,4 +1,4 @@
-﻿import 'dart:typed_data';
+import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -8,9 +8,16 @@ class PdfGenerator {
   static Future<void> generateAndPrintMatchSheet(Map<String, dynamic> matchData, String matchId) async {
     final pdf = pw.Document();
     
-    // Fetch events
-    final eventsSnapshot = await FirebaseFirestore.instance.collection('matches').doc(matchId).collection('events').orderBy('timestamp').get();
-    final events = eventsSnapshot.docs.map((e) => e.data()).toList();
+    // Fetch events with fallback to matchData['events']
+    List<Map<String, dynamic>> events = [];
+    try {
+      final eventsSnapshot = await FirebaseFirestore.instance.collection('matches').doc(matchId).collection('events').orderBy('timestamp').get();
+      events = eventsSnapshot.docs.map((e) => e.data()).toList();
+    } catch (_) {}
+
+    if (events.isEmpty && matchData['events'] is List) {
+      events = (matchData['events'] as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
 
     // Font setup for Arabic support (using a standard font or skipping complex font injection for basic web)
     final font = await PdfGoogleFonts.cairoRegular();

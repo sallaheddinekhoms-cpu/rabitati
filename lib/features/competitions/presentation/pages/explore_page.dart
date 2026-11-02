@@ -1,9 +1,10 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../favorites/presentation/cubit/favorites_cubit.dart';
+import '../../data/repositories/standings_repository.dart';
 import 'club_profile_page.dart';
 
 class ExplorePage extends StatefulWidget {
@@ -14,7 +15,6 @@ class ExplorePage extends StatefulWidget {
 }
 
 class _ExplorePageState extends State<ExplorePage> {
-  // الأقسام المعتمدة مطابقة تماماً للوحة التحكم
   final List<String> _leagues = [
     'جهوي أول',
     'جهوي ثاني فوج أ',
@@ -35,6 +35,44 @@ class _ExplorePageState extends State<ExplorePage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  String _getLeagueId(String league) {
+    if (league.contains('فوج ب') || league.endsWith('ب')) return '3';
+    if (league.contains('فوج أ') || league.endsWith('أ')) return '2';
+    return '1';
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchClubs(String league) async {
+    final leagueId = _getLeagueId(league);
+    try {
+      final clubs = await ApiClient().getClubs(leagueId: leagueId);
+      if (clubs.isNotEmpty) {
+        return clubs.map((c) => {
+          'id': c['id']?.toString() ?? '',
+          'team': (c['name'] ?? c['short_name'] ?? '').toString().trim(),
+          'logoUrl': (c['logo_url'] ?? c['logo'] ?? '').toString().trim(),
+          'stadium': (c['stadium'] ?? '').toString().trim(),
+          'city': (c['city'] ?? '').toString().trim(),
+          'league': league,
+        }).toList();
+      }
+    } catch (_) {}
+
+    // Fallback to Standings
+    try {
+      final standings = await StandingsRepository().getStandingsForLeague(league);
+      return standings.map((s) => {
+        'id': s.id,
+        'team': s.team.trim(),
+        'logoUrl': s.logoUrl.trim(),
+        'stadium': '',
+        'city': '',
+        'league': league,
+      }).toList();
+    } catch (_) {}
+
+    return [];
   }
 
   Widget _buildClubLogo(String logoUrl, double size) {
@@ -113,7 +151,7 @@ class _ExplorePageState extends State<ExplorePage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'استكشف الأقسام والأندية المعتمدة التابعة للرابطة',
+                        'استكشف الأقسام والأندية المعتمدة التابعة للرابطة (48 نادياً معتمداً)',
                         style: TextStyle(fontSize: 13, color: context.appTextSecondary),
                       ),
                       const SizedBox(height: 12),
@@ -158,6 +196,10 @@ class _ExplorePageState extends State<ExplorePage> {
                     Row(
                       children: _leagues.map((league) {
                         final isSelected = league == _selectedLeague;
+                        String label = league;
+                        if (league == 'جهوي ثاني فوج أ') label = 'جهوي 2 (فوج أ)';
+                        if (league == 'جهوي ثاني فوج ب') label = 'جهوي 2 (فوج ب)';
+
                         return Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 3),
@@ -177,10 +219,10 @@ class _ExplorePageState extends State<ExplorePage> {
                               ),
                               onPressed: () => setState(() => _selectedLeague = league),
                               child: Text(
-                                league,
+                                label,
                                 style: TextStyle(
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                                  fontSize: 12.5,
+                                  fontSize: 12,
                                 ),
                               ),
                             ),
@@ -196,19 +238,19 @@ class _ExplorePageState extends State<ExplorePage> {
 
               // ── قائمة الأندية حسب القسم المختار ─────────────────────
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('standings')
-                      .where('league', isEqualTo: _selectedLeague)
-                      .snapshots(),
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  key: ValueKey(_selectedLeague),
+                  future: _fetchClubs(_selectedLeague),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: CircularProgressIndicator(color: context.appPrimary));
                     }
                     if (snapshot.hasError) {
-                      return const Center(child: Text('حدث خطأ أثناء تحميل الأندية'));
+                      return const Center(child: Text('حدث خطأ أثناء تحميل قائمة الأندية'));
                     }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+
+                    final clubs = snapshot.data ?? [];
+                    if (clubs.isEmpty) {
                       return Center(
                         child: Text(
                           'لا توجد أندية مسجلة في $_selectedLeague بعد.',
@@ -217,30 +259,8 @@ class _ExplorePageState extends State<ExplorePage> {
                       );
                     }
 
-                    // تجميع الأندية بدون تكرار
-                    final Map<String, Map<String, dynamic>> uniqueClubs = {};
-                    for (var doc in snapshot.data!.docs) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final team = (data['team'] ?? '').toString().trim();
-                      final logoUrl = (data['logoUrl'] ?? '').toString().trim();
-                      if (team.isEmpty) continue;
-
-                      final key = team.toLowerCase();
-                      if (!uniqueClubs.containsKey(key)) {
-                        uniqueClubs[key] = {
-                          'team': team,
-                          'logoUrl': logoUrl,
-                          'league': _selectedLeague,
-                        };
-                      } else {
-                        if ((uniqueClubs[key]!['logoUrl'] as String).isEmpty && logoUrl.isNotEmpty) {
-                          uniqueClubs[key]!['logoUrl'] = logoUrl;
-                        }
-                      }
-                    }
-
                     final query = _searchQuery.toLowerCase();
-                    final docs = uniqueClubs.values.where((c) {
+                    final docs = clubs.where((c) {
                       if (query.isEmpty) return true;
                       return (c['team'] as String).toLowerCase().contains(query);
                     }).toList();
@@ -266,6 +286,7 @@ class _ExplorePageState extends State<ExplorePage> {
                             final club = docs[index];
                             final teamName = club['team'] as String;
                             final logoUrl = club['logoUrl'] as String;
+                            final stadium = (club['stadium'] as String?) ?? '';
                             final isFavorite = favorites.contains(teamName);
 
                             return GestureDetector(
@@ -291,7 +312,7 @@ class _ExplorePageState extends State<ExplorePage> {
                                   boxShadow: isFavorite
                                       ? [
                                           BoxShadow(
-                                            color: Colors.amber.withValues(alpha: 0.15),
+                                            color: Colors.amber.withOpacity(0.15),
                                             blurRadius: 8,
                                             offset: const Offset(0, 3),
                                           )
@@ -321,7 +342,7 @@ class _ExplorePageState extends State<ExplorePage> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              _selectedLeague,
+                                              stadium.isNotEmpty ? '$_selectedLeague • $stadium' : _selectedLeague,
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: context.appTextSecondary,

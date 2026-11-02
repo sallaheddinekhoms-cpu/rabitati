@@ -1,8 +1,9 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/theme_extensions.dart';
+import '../../../competitions/data/repositories/standings_repository.dart';
+import '../../../competitions/data/models/team_standing_model.dart';
 import '../cubit/favorites_cubit.dart';
 
 class SelectFavoriteTeamPage extends StatefulWidget {
@@ -182,14 +183,10 @@ class _SelectFavoriteTeamPageState extends State<SelectFavoriteTeamPage> {
 
               // ── جلب أندية القسم مباشرة من قاعدة البيانات ─────────────
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  // استعلام مباشر مطابق 100% للوحة التحكم
-                  stream: FirebaseFirestore.instance
-                      .collection('standings')
-                      .where('league', isEqualTo: _selectedLeague)
-                      .snapshots(),
+                child: StreamBuilder<List<TeamStandingModel>>(
+                  stream: StandingsRepository().getStandingsStream(_selectedLeague),
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
+                    if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
                       return Center(child: CircularProgressIndicator(color: context.appPrimary));
                     }
 
@@ -197,7 +194,8 @@ class _SelectFavoriteTeamPageState extends State<SelectFavoriteTeamPage> {
                       return const Center(child: Text('حدث خطأ أثناء تحميل الأندية'));
                     }
 
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                    final standings = snapshot.data ?? [];
+                    if (standings.isEmpty) {
                       return Center(
                         child: Text(
                           'لا توجد أندية مسجلة في $_selectedLeague بعد.',
@@ -208,10 +206,9 @@ class _SelectFavoriteTeamPageState extends State<SelectFavoriteTeamPage> {
 
                     // تجميع الأندية بدون تكرار لنفس القسم
                     final Map<String, Map<String, dynamic>> uniqueClubs = {};
-                    for (var doc in snapshot.data!.docs) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      final team = (data['team'] ?? '').toString().trim();
-                      final logoUrl = (data['logoUrl'] ?? '').toString().trim();
+                    for (var item in standings) {
+                      final team = item.team.trim();
+                      final logoUrl = item.logoUrl.trim();
                       if (team.isEmpty) continue;
 
                       final key = team.toLowerCase();

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../home/presentation/pages/home_page.dart';
 
 class WelcomePage extends StatefulWidget {
@@ -20,11 +19,11 @@ class _WelcomePageState extends State<WelcomePage>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1000),
     );
-    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
+    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _slideAnim = Tween<Offset>(
-      begin: const Offset(0, 0.2),
+      begin: const Offset(0, 0.1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     _controller.forward();
@@ -53,236 +52,389 @@ class _WelcomePageState extends State<WelcomePage>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: Column(
-          children: [
-            // ── القسم العلوي: اللوغو والعنوان ──────────────────────
-            Expanded(
-              flex: 45,
-              child: Container(
-                color: Colors.white,
-                width: double.infinity,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      'assets/images/logo.png',
-                      width: size.width * 0.55 > 220 ? 220 : size.width * 0.55,
-                      height: size.height * 0.18 > 140 ? 140 : size.height * 0.18,
-                      fit: BoxFit.contain,
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'رابطتي',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1A7A3C),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE8681A).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE8681A), width: 1),
-                          ),
-                          child: const Text(
-                            'v1.1.0 Beta',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE8681A),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'الرابطة الجهوية لكرة القدم البليدة',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF555555),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+      backgroundColor: const Color(0xFF071E12),
+      body: Stack(
+        children: [
+          // ── تدرج لوني عميق ولمسات إضاءة ملاعب ────────────────────
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF0D3320),
+                    Color(0xFF071E12),
+                    Color(0xFF04120B),
                   ],
                 ),
               ),
             ),
+          ),
 
-            // ── القسم الأوسط: صورة الملعب ────────────────────────
-            SizedBox(
-              height: size.height * 0.26,
-              width: double.infinity,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Image.asset(
-                    'assets/images/league_logo_splash.jpg',
-                    fit: BoxFit.cover,
-                  ),
-                  // تدرج لوني من الأبيض للأعلى
-                  Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      height: 60,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.white, Colors.transparent],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // تدرج لوني للأسفل نحو الأخضر
-                  Align(
-                    alignment: Alignment.bottomCenter,
-                    child: Container(
-                      height: 80,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Color(0xFF1A7A3C)],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+          // هالة إضاءة دائرية علوية
+          Positioned(
+            top: -size.width * 0.3,
+            right: -size.width * 0.2,
+            child: Container(
+              width: size.width * 0.9,
+              height: size.width * 0.9,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFF1B7A36).withOpacity(0.25),
               ),
             ),
+          ),
 
-            // ── القسم السفلي: الأخضر ──────────────────────────────
-            Expanded(
-              flex: 38,
-              child: Container(
-                color: const Color(0xFF1A7A3C),
-                width: double.infinity,
-                child: SlideTransition(
-                  position: _slideAnim,
-                  child: FadeTransition(
-                    opacity: _fadeAnim,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        // العنوان
-                        const Text(
-                          'كل الرابطة... في تطبيق واحد',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+          // هالة إضاءة برتقالية سفلية ناعمة
+          Positioned(
+            bottom: -size.width * 0.3,
+            left: -size.width * 0.2,
+            child: Container(
+              width: size.width * 0.8,
+              height: size.width * 0.8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFE8681A).withOpacity(0.12),
+              ),
+            ),
+          ),
+
+          // ── المحتوى التفاعلي الرئيسي ────────────────────────────
+          SafeArea(
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: SlideTransition(
+                position: _slideAnim,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      const Spacer(flex: 1),
+
+                      // شارة الإصدار الرسمي
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF2EB85C).withOpacity(0.4),
+                            width: 1,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF2EB85C).withOpacity(0.15),
+                              blurRadius: 12,
+                              spreadRadius: 1,
+                            ),
+                          ],
                         ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.verified,
+                              color: Color(0xFF2EB85C),
+                              size: 16,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'النسخة الرسمية المعتمدة',
+                              style: TextStyle(
+                                color: Color(0xFFE2F5EA),
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-                        // الأيقونات الأربعة
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: const [
-                              _FeatureIcon(
-                                icon: Icons.group_outlined,
-                                label: 'الفرق',
-                              ),
-                              _FeatureIcon(
-                                icon: Icons.article_outlined,
-                                label: 'الأخبار',
-                              ),
-                              _FeatureIcon(
-                                icon: Icons.emoji_events_outlined,
-                                label: 'الترتيب',
-                              ),
-                              _FeatureIcon(
-                                icon: Icons.sports_soccer,
-                                label: 'المباريات',
-                              ),
-                            ],
+                      const SizedBox(height: 20),
+
+                      // شعار الرابطة مع إطار زجاجي راقٍ
+                      Container(
+                        width: 110,
+                        height: 110,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.06),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.2),
+                            width: 1.5,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.35),
+                              blurRadius: 20,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
 
-                        // زر لنبدأ
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 40),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _navigateToHome,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primaryOrange,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                elevation: 4,
+                      const SizedBox(height: 16),
+
+                      // عنوان التطبيق
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'رابطتي',
+                            style: TextStyle(
+                              fontSize: 34,
+                              fontWeight: FontWeight.w900,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFE8681A), Color(0xFFFF8533)],
                               ),
-                              child: const Text(
-                                'لنبدأ',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'LRF BLIDA',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      const Text(
+                        'الرابطة الجهوية لكرة القدم البليدة',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFC0DACB),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'بوابتك الرقمية الحصرية لمتابعة البطولات، النتائج، والأندية',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.6),
+                        ),
+                      ),
+
+                      const Spacer(flex: 1),
+
+                      // ── بطاقات الميزات الأربعة بحجم أنيق ────────────────
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 2.2,
+                        children: const [
+                          _WelcomeFeatureCard(
+                            icon: Icons.sports_soccer,
+                            title: 'المباريات والنتائج',
+                            subtitle: 'تغطية حية لكافة الجولات',
+                            iconColor: Color(0xFF2EB85C),
+                          ),
+                          _WelcomeFeatureCard(
+                            icon: Icons.emoji_events_outlined,
+                            title: 'الترتيب والإحصائيات',
+                            subtitle: 'جداول دقيقة مع الفوارق',
+                            iconColor: Color(0xFFFFB800),
+                          ),
+                          _WelcomeFeatureCard(
+                            icon: Icons.newspaper_outlined,
+                            title: 'الأخبار والنشرات',
+                            subtitle: 'نشرات رسمية وتحميل PDF',
+                            iconColor: Color(0xFF38BDF8),
+                          ),
+                          _WelcomeFeatureCard(
+                            icon: Icons.badge_outlined,
+                            title: 'الاعتماد الصحفي',
+                            subtitle: 'بطاقات رقمية مع QR',
+                            iconColor: Color(0xFFE8681A),
+                          ),
+                        ],
+                      ),
+
+                      const Spacer(flex: 2),
+
+                      // ── زر البدء العصري مع تدرج لوني ─────────────────────
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: ElevatedButton(
+                          onPressed: _navigateToHome,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF1B7A36),
+                                  Color(0xFF25A244),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF1B7A36).withOpacity(0.45),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 6),
                                 ),
+                              ],
+                            ),
+                            child: Container(
+                              alignment: Alignment.center,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Text(
+                                    'دخول التطبيق الرسمي',
+                                    style: TextStyle(
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  SizedBox(width: 10),
+                                  Icon(
+                                    Icons.arrow_forward_rounded,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // تذييل الصفحة الرسمي
+                      Text(
+                        'الموسم الرياضي 2026/2027 • الرابطة الجهوية لكرة القدم - البليدة',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withOpacity(0.4),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _FeatureIcon extends StatelessWidget {
+class _WelcomeFeatureCard extends StatelessWidget {
   final IconData icon;
-  final String label;
+  final String title;
+  final String subtitle;
+  final Color iconColor;
 
-  const _FeatureIcon({required this.icon, required this.label});
+  const _WelcomeFeatureCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
-          ),
-          child: Icon(icon, color: Colors.white, size: 28),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.12),
+          width: 0.8,
         ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: iconColor.withOpacity(0.4),
+                width: 0.8,
+              ),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
           ),
-        ),
-      ],
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

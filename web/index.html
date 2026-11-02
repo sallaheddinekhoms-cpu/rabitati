@@ -1,7 +1,19 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
+  <script>
+    (function () {
+      var base = document.querySelector('base');
+      var path = window.location.pathname;
+      if (!path.endsWith('/')) {
+        path = path.substring(0, path.lastIndexOf('/') + 1);
+      }
+      if (base) {
+        base.setAttribute('href', path || './');
+      }
+    })();
+  </script>
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -30,6 +42,14 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body style="background-color: #F1F8F4; margin: 0; padding: 0; overflow: hidden;">
+  <script>
+    try {
+      var trackUrl = (window.location.hostname.indexOf('lrf-blida.dz') !== -1)
+        ? '/api/v1/track/visit?type=web_app'
+        : 'https://lrf-blida.dz/api/v1/track/visit?type=web_app';
+      fetch(trackUrl, { mode: 'no-cors' }).catch(function(){});
+    } catch(e) {}
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

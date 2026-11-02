@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/widgets/club_logo_widget.dart';
 
@@ -8,6 +8,28 @@ class ClubProfilePage extends StatelessWidget {
   final String league;
 
   const ClubProfilePage({super.key, required this.clubName, required this.league});
+
+  Future<Map<String, dynamic>> _loadData() async {
+    final clubs = await ApiClient().getClubs();
+    final club = clubs.firstWhere(
+      (c) => (c['name'] ?? '').toString().trim().toLowerCase() == clubName.trim().toLowerCase(),
+      orElse: () => {
+        'name': clubName,
+        'logo_url': '',
+        'foundation': 'غير متوفر',
+        'stadium': 'غير متوفر',
+        'colors': 'غير متوفر',
+      },
+    );
+
+    final clubId = club['id']?.toString() ?? clubName;
+    final players = await ApiClient().getClubPlayers(clubId);
+
+    return {
+      'club': club,
+      'players': players,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,18 +54,22 @@ class ClubProfilePage extends StatelessWidget {
             ],
           ),
         ),
-        body: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('standings').where('league', isEqualTo: league).where('team', isEqualTo: clubName).snapshots(),
+        body: FutureBuilder<Map<String, dynamic>>(
+          future: _loadData(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: context.appPrimary));
-            if (snapshot.data!.docs.isEmpty) return Center(child: Text('النادي غير موجود', style: TextStyle(color: context.appTextSecondary)));
-            
-            final clubData = snapshot.data!.docs.first.data() as Map<String, dynamic>;
-            final logoUrl = clubData['logoUrl'] ?? '';
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Center(child: CircularProgressIndicator(color: context.appPrimary));
+            }
+
+            final data = snapshot.data ?? {};
+            final clubData = (data['club'] as Map<String, dynamic>?) ?? {};
+            final List players = (data['players'] as List?) ?? [];
+
+            final logoUrl = clubData['logo_url'] ?? clubData['logoUrl'] ?? '';
             final foundation = clubData['foundation'] ?? 'غير متوفر';
             final stadium = clubData['stadium'] ?? clubData['president'] ?? 'غير متوفر';
             final colors = clubData['colors'] ?? clubData['coaches'] ?? 'غير متوفر';
-            
+
             return TabBarView(
               children: [
                 // Info Tab
@@ -82,52 +108,64 @@ class ClubProfilePage extends StatelessWidget {
                     ],
                   ),
                 ),
+
                 // Players Tab
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('players').where('clubName', isEqualTo: clubName).snapshots(),
-                  builder: (context, pSnapshot) {
-                    if (!pSnapshot.hasData) return Center(child: CircularProgressIndicator(color: context.appPrimary));
-                    final players = pSnapshot.data!.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-                    players.sort((a, b) => (b['goals'] ?? 0).compareTo(a['goals'] ?? 0));
-                    
-                    if (players.isEmpty) return Center(child: Text('لا توجد قائمة لاعبين', style: TextStyle(color: context.appTextSecondary)));
-                    
-                    return ListView.builder(
-                      itemCount: players.length,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      itemBuilder: (context, index) {
-                        final p = players[index];
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: context.appCardBackground,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: context.appBorder),
-                            boxShadow: context.appCardShadow,
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: context.appPrimary,
-                              child: Text('${p['number'] ?? ''}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                players.isEmpty
+                    ? Center(child: Text('لا توجد قائمة لاعبين حالياً', style: TextStyle(color: context.appTextSecondary)))
+                    : ListView.builder(
+                        itemCount: players.length,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemBuilder: (context, index) {
+                          final p = players[index] as Map<String, dynamic>;
+                          final number = p['jersey_number'] ?? p['number'] ?? '';
+                          final name = p['name'] ?? '';
+                          final position = p['position'] ?? 'لاعب';
+                          final license = p['license_number'] ?? p['license'];
+                          final birthDate = p['birth_date'] ?? p['birthDate'];
+                          final goals = p['goals'] ?? 0;
+
+                          return Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: context.appCardBackground,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: context.appBorder),
+                              boxShadow: context.appCardShadow,
                             ),
-                            title: Text(p['name'] ?? '', style: TextStyle(color: context.appTextPrimary, fontWeight: FontWeight.bold)),
-                            subtitle: Text('المركز: ${p['position'] ?? ''}', style: TextStyle(color: context.appTextSecondary)),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.sports_soccer, color: context.appPrimary, size: 16),
-                                Text('${p['goals'] ?? 0}', style: TextStyle(color: context.appTextPrimary, fontWeight: FontWeight.bold)),
-                              ],
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: context.appPrimary,
+                                child: Text('$number', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                              title: Text(name, style: TextStyle(color: context.appTextPrimary, fontWeight: FontWeight.bold)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'المركز: $position${license != null ? ' | الإجازة: $license' : ''}',
+                                    style: TextStyle(color: context.appTextSecondary, fontSize: 13),
+                                  ),
+                                  if (birthDate != null)
+                                    Text(
+                                      'الميلاد: $birthDate',
+                                      style: TextStyle(color: context.appTextSecondary.withOpacity(0.8), fontSize: 11),
+                                    ),
+                                ],
+                              ),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.sports_soccer, color: context.appPrimary, size: 16),
+                                  Text('$goals', style: TextStyle(color: context.appTextPrimary, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+                          );
+                        },
+                      ),
               ],
             );
-          }
+          },
         ),
       ),
     );

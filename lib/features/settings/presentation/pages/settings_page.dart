@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/theme/theme_cubit.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/widgets/club_logo_widget.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../favorites/presentation/cubit/favorites_cubit.dart';
 import '../../../favorites/presentation/pages/select_favorite_team_page.dart';
 import '../../../administration/presentation/pages/about_app_page.dart';
@@ -54,7 +55,7 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
             content: const Text(
-              'La langue française a été sélectionnée comme préférence. La traduction complète de l''ensemble des rubriques sera déployée dans la version v1.2.0.',
+              'La langue française a été sélectionnée comme préférence. La traduction complète de l''ensemble des rubriques sera déployée dans la version v1.4.0.',
             ),
             actions: [
               ElevatedButton(
@@ -165,7 +166,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           child: const Icon(Icons.language, color: Colors.blue, size: 22),
                         ),
                         title: Text('لغة التطبيق / Langue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: context.appTextPrimary)),
-                        subtitle: Text(_selectedLanguage == 'ar' ? 'العربية (افتراضي)' : 'Français (v1.2.0)', style: TextStyle(fontSize: 12, color: context.appTextSecondary)),
+                        subtitle: Text(_selectedLanguage == 'ar' ? 'العربية (افتراضي)' : 'Français (v1.4.0)', style: TextStyle(fontSize: 12, color: context.appTextSecondary)),
                         trailing: DropdownButton<String>(
                           value: _selectedLanguage,
                           underline: const SizedBox(),
@@ -320,23 +321,47 @@ class _SettingsPageState extends State<SettingsPage> {
                     border: Border.all(color: context.appBorder),
                     boxShadow: context.appCardShadow,
                   ),
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.app_registration, color: Colors.teal, size: 22),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.teal.withOpacity(0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.app_registration, color: Colors.teal, size: 22),
+                          ),
+                          title: Text('حول التطبيق (v1.4.0)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: context.appTextPrimary)),
+                          subtitle: Text('التحقق من التحديثات، معلومات الاتصال بالرابطة والحقوق', style: TextStyle(fontSize: 12, color: context.appTextSecondary)),
+                          trailing: Icon(Icons.arrow_forward_ios, size: 15, color: context.appTextSecondary),
+                          onTap: () {
+                            Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppPage()));
+                          },
+                        ),
+                        Divider(height: 1, indent: 16, endIndent: 16, color: context.appBorder),
+                        ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.privacy_tip_outlined, color: Colors.green, size: 22),
+                          ),
+                          title: Text('سياسة الخصوصية (Privacy Policy)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: context.appTextPrimary)),
+                          subtitle: Text('حماية البيانات الشخصية وحقوق المستخدمين', style: TextStyle(fontSize: 12, color: context.appTextSecondary)),
+                          trailing: Icon(Icons.open_in_new, size: 16, color: context.appTextSecondary),
+                          onTap: () async {
+                            final uri = Uri.parse('https://rabitati-app.web.app/privacy.html');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                        ),
+                      ],
                     ),
-                    title: Text('حول التطبيق (v1.1.0 Beta)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14.5, color: context.appTextPrimary)),
-                    subtitle: Text('التحقق من التحديثات، معلومات الاتصال بالرابطة والحقوق', style: TextStyle(fontSize: 12, color: context.appTextSecondary)),
-                    trailing: Icon(Icons.arrow_forward_ios, size: 15, color: context.appTextSecondary),
-                    onTap: () {
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutAppPage()));
-                    },
                   ),
-                ),
                 const SizedBox(height: 32),
 
                 // التذييل
@@ -344,7 +369,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   child: Column(
                     children: [
                       Text(
-                        'رابطتي | الإصدار 1.1.0 (Beta)',
+                        'رابطتي | الإصدار 1.4.0',
                         style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.appTextSecondary),
                       ),
                       const SizedBox(height: 4),

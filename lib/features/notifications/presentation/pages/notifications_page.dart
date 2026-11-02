@@ -1,16 +1,12 @@
-﻿import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 import '../../../../core/theme/theme_extensions.dart';
-import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
+import '../../../news/data/repositories/news_repository.dart';
 
 class NotificationsPage extends StatelessWidget {
   const NotificationsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    initializeDateFormatting('ar', null);
-    
     return Scaffold(
       backgroundColor: context.appBackground,
       appBar: AppBar(
@@ -20,18 +16,15 @@ class NotificationsPage extends StatelessWidget {
         elevation: 0.5,
         iconTheme: IconThemeData(color: context.appPrimary),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('notifications')
-            .orderBy('timestamp', descending: true)
-            .snapshots(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: NewsRepository().getUrgentNewsStream(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
             return Center(child: CircularProgressIndicator(color: context.appPrimary));
           }
-          final docs = snapshot.data?.docs ?? [];
-          
-          if (docs.isEmpty) {
+          final items = snapshot.data ?? [];
+
+          if (items.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -46,25 +39,27 @@ class NotificationsPage extends StatelessWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: docs.length,
+            itemCount: items.length,
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
-              final title = data['title'] ?? '';
-              final body = data['body'] ?? '';
-              final type = data['type'] ?? 'عاجل';
-              
-              DateTime? date;
-              if (data['timestamp'] != null) {
-                date = (data['timestamp'] as Timestamp).toDate();
-              }
-              String timeStr = date != null ? DateFormat('HH:mm - yyyy/MM/dd').format(date) : '';
+              final data = items[index];
+              final title = (data['title'] ?? '').toString();
+              final body = (data['excerpt'] ?? data['body'] ?? data['content'] ?? '').toString();
+              final type = (data['category_name'] ?? data['type'] ?? 'عاجل').toString();
+              final timeStr = (data['created_at_human'] ?? data['date'] ?? '').toString();
 
               IconData icon = Icons.notifications;
               Color color = context.appPrimary;
-              
-              if (type == 'عاجل') { icon = Icons.warning; color = Colors.red; }
-              else if (type == 'إداري') { icon = Icons.gavel; color = Colors.blue.shade700; }
-              else if (type == 'رياضي') { icon = Icons.sports_soccer; color = const Color(0xFF1B7A36); }
+
+              if (type.contains('عاجل')) {
+                icon = Icons.warning;
+                color = Colors.red;
+              } else if (type.contains('إداري') || type.contains('انضباط')) {
+                icon = Icons.gavel;
+                color = Colors.blue.shade700;
+              } else if (type.contains('رياضي') || type.contains('مباراة')) {
+                icon = Icons.sports_soccer;
+                color = const Color(0xFF1B7A36);
+              }
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -85,10 +80,14 @@ class NotificationsPage extends StatelessWidget {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const SizedBox(height: 6),
-                      Text(body, style: TextStyle(color: context.appTextSecondary, fontSize: 13)),
-                      const SizedBox(height: 8),
-                      Text(timeStr, style: TextStyle(color: context.appPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
+                      if (body.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(body, style: TextStyle(color: context.appTextSecondary, fontSize: 13)),
+                      ],
+                      if (timeStr.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text(timeStr, style: TextStyle(color: context.appPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
+                      ],
                     ],
                   ),
                 ),

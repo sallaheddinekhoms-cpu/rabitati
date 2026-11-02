@@ -1,5 +1,5 @@
-﻿import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../delegate/delegate_dashboard.dart';
 
@@ -32,21 +32,28 @@ class _DelegateLoginPageState extends State<DelegateLoginPage> {
 
     setState(() => _isLoading = true);
     try {
-      final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      if (mounted && userCredential.user != null) {
+      final result = await ApiClient().loginDelegate(email, password);
+      if (mounted && result['success'] == true) {
+        final user = result['user'] as Map<String, dynamic>;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => DelegateDashboard(email: userCredential.user!.email!)),
+          MaterialPageRoute(builder: (context) => DelegateDashboard(email: user['email'] ?? email)),
         );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'خطأ في تسجيل الدخول: تأكد من صحة البريد وكلمة المرور'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('خطأ في تسجيل الدخول: تأكد من صحة البريد وكلمة المرور'),
+            content: Text('خطأ في الاتصال بالخادم: $e'),
             backgroundColor: Colors.red,
           ),
         );

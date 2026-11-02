@@ -10,6 +10,7 @@ import 'referees_page.dart';
 import 'forms_page.dart';
 import 'press_portal_page.dart';
 import '../../../delegate/delegate_dashboard.dart';
+import '../../../../core/network/api_client.dart';
 
 class AdministrationPage extends StatelessWidget {
   const AdministrationPage({super.key});
@@ -142,11 +143,16 @@ class AdministrationPage extends StatelessWidget {
           subtitle: 'تسجيل الدخول لمحافظي ومراقبي المباريات.',
           icon: Icons.shield,
           color: const Color(0xFF1B7A36),
-          onTap: () {
-            if (FirebaseAuth.instance.currentUser != null) {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => DelegateDashboard(email: FirebaseAuth.instance.currentUser!.email!)));
-            } else {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const DelegateLoginPage()));
+          onTap: () async {
+            final savedUser = await ApiClient().getSavedUser();
+            final firebaseUser = FirebaseAuth.instance.currentUser;
+            final email = savedUser?['email'] ?? firebaseUser?.email;
+            if (context.mounted) {
+              if (email != null && email.toString().trim().isNotEmpty) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => DelegateDashboard(email: email.toString().trim())));
+              } else {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const DelegateLoginPage()));
+              }
             }
           },
         ),
@@ -169,7 +175,7 @@ class AdministrationPage extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                'رابطتي | الإصدار 1.1.0 (Beta)',
+                'رابطتي | الإصدار 1.4.0',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.appTextSecondary),
               ),
               const SizedBox(height: 4),

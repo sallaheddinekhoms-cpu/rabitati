@@ -179,17 +179,19 @@ class _NewsPageState extends State<NewsPage> {
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: context.appBorder),
           boxShadow: context.appCardShadow,
-          image: hasImage && getAppImageProvider(news.imageUrl) != null
-              ? DecorationImage(
-                  image: getAppImageProvider(news.imageUrl)!,
-                  fit: BoxFit.cover,
-                )
-              : null,
-          color: hasImage ? null : const Color(0xFF1B7A36),
+          color: const Color(0xFF1B7A36),
         ),
         clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
+            if (hasImage)
+              Positioned.fill(
+                child: AppImage(
+                  imageUrl: news.imageUrl,
+                  fit: BoxFit.cover,
+                  fallback: Container(color: const Color(0xFF1B7A36)),
+                ),
+              ),
             // التدرج اللوني الشفاف
             Container(
               decoration: BoxDecoration(
@@ -292,16 +294,17 @@ class _NewsPageState extends State<NewsPage> {
                   decoration: BoxDecoration(
                     color: catColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(14),
-                    image: hasImage && getAppImageProvider(news.imageUrl) != null
-                        ? DecorationImage(
-                            image: getAppImageProvider(news.imageUrl)!,
-                            fit: BoxFit.cover,
-                          )
-                        : null,
                   ),
-                  child: !hasImage || getAppImageProvider(news.imageUrl) == null
-                      ? Center(child: Icon(Icons.newspaper, color: catColor, size: 32))
-                      : null,
+                  clipBehavior: Clip.antiAlias,
+                  child: hasImage
+                      ? AppImage(
+                          imageUrl: news.imageUrl,
+                          width: 100,
+                          height: 90,
+                          fit: BoxFit.cover,
+                          fallback: Center(child: Icon(Icons.newspaper, color: catColor, size: 32)),
+                        )
+                      : Center(child: Icon(Icons.newspaper, color: catColor, size: 32)),
                 ),
                 const SizedBox(width: 14),
                 // التفاصيل

@@ -1,4 +1,4 @@
-﻿import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TeamStandingModel {
   final String id;
@@ -24,6 +24,21 @@ class TeamStandingModel {
     required this.points,
     required this.logoUrl,
   });
+
+  factory TeamStandingModel.fromJson(Map<String, dynamic> data) {
+    return TeamStandingModel(
+      id: data['team_id']?.toString() ?? data['id']?.toString() ?? '',
+      league: data['league_name'] ?? data['league'] ?? '',
+      team: data['team_name'] ?? data['team'] ?? '',
+      played: (data['played'] as num?)?.toInt() ?? 0,
+      won: (data['won'] as num?)?.toInt() ?? 0,
+      drawn: (data['drawn'] as num?)?.toInt() ?? 0,
+      lost: (data['lost'] as num?)?.toInt() ?? 0,
+      gd: (data['goal_difference'] as num?)?.toInt() ?? (data['gd'] as num?)?.toInt() ?? 0,
+      points: (data['points'] as num?)?.toInt() ?? 0,
+      logoUrl: data['logo_url'] ?? data['logo'] ?? '',
+    );
+  }
 
   factory TeamStandingModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;

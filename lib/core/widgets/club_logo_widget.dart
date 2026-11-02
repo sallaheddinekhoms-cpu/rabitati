@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../network/api_client.dart';
 import '../theme/theme_extensions.dart';
 
 // ── خدمة الكاش والبحث التلقائي عن شعارات الأندية ────────────
@@ -47,49 +47,34 @@ class TeamLogoService {
       }
     } catch (_) {}
 
-    // 2. تحميل فوري وسريع ومباشر من فايرستور
-    _fetchFromFirestore();
-
-    // 3. الاستماع التلقائي لأي تحديثات جديدة
-    FirebaseFirestore.instance.collection('standings').snapshots().listen((snapshot) {
-      _processSnapshot(snapshot.docs);
-    });
-
-    FirebaseFirestore.instance.collection('clubs').snapshots().listen((snapshot) {
-      _processSnapshot(snapshot.docs);
-    });
+    // 2. تحميل فوري وسريع ومباشر من الـ REST API
+    _fetchFromApi();
   }
 
-  static Future<void> _fetchFromFirestore() async {
+  static Future<void> _fetchFromApi() async {
     try {
-      final standingsSnap = await FirebaseFirestore.instance.collection('standings').get();
-      _processSnapshot(standingsSnap.docs);
+      final apiClient = ApiClient();
+      final clubs = await apiClient.getClubs();
+      bool hasNew = false;
+      for (var club in clubs) {
+        final team = (club['name'] ?? '').toString().trim();
+        final logo = (club['logo'] ?? club['logo_url'] ?? '').toString().trim();
+        if (team.isNotEmpty && logo.isNotEmpty) {
+          if (_logoCache[team] != logo) {
+            _logoCache[team] = logo;
+            hasNew = true;
+          }
+        }
+      }
 
-      final clubsSnap = await FirebaseFirestore.instance.collection('clubs').get();
-      _processSnapshot(clubsSnap.docs);
+      if (hasNew) {
+        updatesNotifier.value++;
+        _saveToDisk();
+      }
     } catch (_) {}
   }
 
-  static void _processSnapshot(List<DocumentSnapshot> docs) {
-    bool hasNew = false;
-    for (var doc in docs) {
-      final data = doc.data() as Map<String, dynamic>?;
-      if (data == null) continue;
-      final team = (data['team'] ?? data['name'] ?? '').toString().trim();
-      final logo = (data['logoUrl'] ?? data['logo'] ?? '').toString().trim();
-      if (team.isNotEmpty && logo.isNotEmpty) {
-        if (_logoCache[team] != logo) {
-          _logoCache[team] = logo;
-          hasNew = true;
-        }
-      }
-    }
 
-    if (hasNew) {
-      updatesNotifier.value++;
-      _saveToDisk();
-    }
-  }
 
   static Future<void> _saveToDisk() async {
     try {

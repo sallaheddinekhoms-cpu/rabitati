@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../../core/widgets/club_logo_widget.dart';
 import '../cubit/standings_cubit.dart';
@@ -39,23 +39,18 @@ class _StandingsPageState extends State<StandingsPage> {
 
   Future<void> _loadVisibleLeagues() async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('settings')
-          .doc('leagues_visibility')
-          .get();
-      if (doc.exists) {
-        final data = doc.data()!;
-        final visible = _allLeagues.where((l) => data[l] as bool? ?? false).toList();
-        if (mounted) setState(() {
-          _visibleLeagues = visible.isEmpty ? _allLeagues.take(3).toList() : visible;
-          _loadingLeagues = false;
-        });
-      } else {
-        if (mounted) setState(() {
-          _visibleLeagues = _allLeagues.take(3).toList();
-          _loadingLeagues = false;
-        });
+      final config = await ApiClient().getConfig();
+      if (config != null && config['leagues'] is List) {
+        final leaguesList = (config['leagues'] as List).map((l) => (l['name'] ?? '').toString()).where((n) => n.isNotEmpty).toList();
+        if (mounted && leaguesList.isNotEmpty) {
+          setState(() {
+            _visibleLeagues = leaguesList;
+            _loadingLeagues = false;
+          });
+          return;
+        }
       }
+      if (mounted) setState(() => _loadingLeagues = false);
     } catch (_) {
       if (mounted) setState(() => _loadingLeagues = false);
     }

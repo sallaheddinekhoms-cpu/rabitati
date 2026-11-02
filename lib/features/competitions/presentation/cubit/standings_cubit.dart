@@ -17,7 +17,7 @@ class StandingsCubit extends Cubit<StandingsState> {
     currentLeague = leagueName;
     emit(StandingsLoading());
     _subscription?.cancel(); // إلغاء الاشتراك القديم عند تغيير القسم
-    _subscription = _repository.getStandingsForLeague(leagueName).listen(
+    _subscription = _repository.getStandingsStream(leagueName).listen(
       (teams) => emit(StandingsLoaded(teams)),
       onError: (error) => emit(StandingsError("حدث خطأ في تحميل الترتيب.")),
     );
