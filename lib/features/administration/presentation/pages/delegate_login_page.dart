@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../delegate/delegate_dashboard.dart';
@@ -32,12 +33,27 @@ class _DelegateLoginPageState extends State<DelegateLoginPage> {
 
     setState(() => _isLoading = true);
     try {
+      // 1. Firebase Auth Sign-in (so Firestore permissions work seamlessly)
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
+      } catch (authErr) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+        } catch (_) {}
+      }
+
       final result = await ApiClient().loginDelegate(email, password);
       if (mounted && result['success'] == true) {
         final user = result['user'] as Map<String, dynamic>;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => DelegateDashboard(email: user['email'] ?? email)),
+        );
+      } else if (FirebaseAuth.instance.currentUser != null && FirebaseAuth.instance.currentUser?.isAnonymous == false) {
+        // Successfully logged in via Firebase Auth
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => DelegateDashboard(email: email)),
         );
       } else {
         if (mounted) {

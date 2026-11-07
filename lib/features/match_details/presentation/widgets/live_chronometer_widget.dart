@@ -27,6 +27,9 @@ class _LiveChronometerWidgetState extends State<LiveChronometerWidget>
   Timer? _ticker;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  DateTime? _lastSyncTime;
+  int? _baseElapsedSeconds;
+  String? _lastTimingStr;
 
   @override
   void initState() {
@@ -40,13 +43,29 @@ class _LiveChronometerWidgetState extends State<LiveChronometerWidget>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    _syncBaseTime();
     // تحديث دوري للعداد الزمني
     _startTickerIfNeeded();
+  }
+
+  void _syncBaseTime() {
+    final timing = widget.match.timingDisplay ?? '';
+    if (timing.isNotEmpty && timing != _lastTimingStr) {
+      _lastTimingStr = timing;
+      final m = RegExp(r'^(\d{1,3}):(\d{2})$').firstMatch(timing);
+      if (m != null) {
+        final min = int.tryParse(m.group(1) ?? '0') ?? 0;
+        final sec = int.tryParse(m.group(2) ?? '0') ?? 0;
+        _baseElapsedSeconds = min * 60 + sec;
+        _lastSyncTime = DateTime.now();
+      }
+    }
   }
 
   @override
   void didUpdateWidget(covariant LiveChronometerWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncBaseTime();
     if (widget.match.isLive != oldWidget.match.isLive) {
       _startTickerIfNeeded();
     }
@@ -74,7 +93,25 @@ class _LiveChronometerWidgetState extends State<LiveChronometerWidget>
     final isLive = match.isLive;
     final isHalfTime = match.isHalfTime;
     final isFinished = match.isFinished;
-    final chrono = match.chronometerDisplay;
+    String chrono = match.chronometerDisplay;
+
+    // Fallback: If chronometerDisplay is generic "00:00" or static, but we parsed a base time
+    if (isLive && !isHalfTime && !isFinished) {
+      if ((chrono == "00:00" || chrono == "45:00") && _baseElapsedSeconds != null && _lastSyncTime != null) {
+        final addSec = DateTime.now().difference(_lastSyncTime!).inSeconds;
+        final total = _baseElapsedSeconds! + addSec;
+        if (total <= 5400) {
+          final m = (total ~/ 60).toString().padLeft(2, '0');
+          final s = (total % 60).toString().padLeft(2, '0');
+          chrono = "$m:$s";
+        } else {
+          final extra = total - 5400;
+          final em = (extra ~/ 60).toString().padLeft(2, '0');
+          final es = (extra % 60).toString().padLeft(2, '0');
+          chrono = "90:00 +$em:$es";
+        }
+      }
+    }
 
     if (isLive && !isHalfTime) {
       final child = Row(

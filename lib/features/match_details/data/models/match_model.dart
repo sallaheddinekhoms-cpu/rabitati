@@ -164,7 +164,9 @@ class MatchModel {
         s == 'finished' ||
         stg == 'finished' ||
         stg == 'منتهية' ||
-        stg == 'انتهت';
+        stg == 'انتهت' ||
+        stg == 'نهاية اللقاء' ||
+        stg == 'نهاية المباراة';
   }
 
   bool get isHalfTime {
@@ -172,16 +174,20 @@ class MatchModel {
     final stg = (matchStage ?? '').trim().toLowerCase();
     return s == 'استراحة' ||
         s == 'استراحة بين الشوطين' ||
+        s == 'بين الشوطين' ||
         s == 'half_time' ||
         stg == 'half_time' ||
         stg == 'استراحة' ||
-        stg == 'استراحة بين الشوطين';
+        stg == 'استراحة بين الشوطين' ||
+        stg == 'بين الشوطين';
   }
 
   bool get isSecondHalf {
     final s = status.trim().toLowerCase();
     final stg = (matchStage ?? '').trim().toLowerCase();
-    return s == 'الشوط الثاني' || stg == 'second_half';
+    return s == 'الشوط الثاني' ||
+        stg == 'second_half' ||
+        stg == 'الشوط الثاني';
   }
 
   bool get isLive {
@@ -194,7 +200,13 @@ class MatchModel {
         s == 'الشوط الأول' ||
         s == 'الشوط الثاني' ||
         stg == 'first_half' ||
-        stg == 'second_half';
+        stg == 'second_half' ||
+        stg == 'الشوط الأول' ||
+        stg == 'الشوط الثاني' ||
+        stg == 'بين الشوطين' ||
+        stg == 'الوقت الإضافي الأول' ||
+        stg == 'الوقت الإضافي الثاني' ||
+        stg == 'ركلات الترجيح';
   }
 
   bool get isScheduled => !isLive && !isFinished;
@@ -205,20 +217,23 @@ class MatchModel {
     if (isHalfTime) return "استراحة 45:00";
 
     if (isSecondHalf) {
-      if (secondHalfStartTime != null) {
-        final diffSec = DateTime.now().difference(secondHalfStartTime!).inSeconds;
-        if (diffSec >= 0) {
-          final totalSec = 2700 + diffSec; // 45:00 = 2700s
-          if (totalSec <= 5400) { // <= 90:00
-            final m = (totalSec ~/ 60).toString().padLeft(2, '0');
-            final s = (totalSec % 60).toString().padLeft(2, '0');
-            return "$m:$s";
-          } else {
-            final extra = totalSec - 5400;
-            final em = (extra ~/ 60).toString().padLeft(2, '0');
-            final es = (extra % 60).toString().padLeft(2, '0');
-            return "90:00 +$em:$es";
-          }
+      DateTime? start = secondHalfStartTime;
+      if (start == null && firstHalfStartTime != null) {
+        start = firstHalfStartTime!.add(const Duration(minutes: 60));
+      }
+      if (start != null) {
+        final diffSec = DateTime.now().difference(start).inSeconds;
+        final clampedDiff = diffSec >= 0 ? diffSec : 0;
+        final totalSec = 2700 + clampedDiff; // 45:00 = 2700s
+        if (totalSec <= 5400) { // <= 90:00
+          final m = (totalSec ~/ 60).toString().padLeft(2, '0');
+          final s = (totalSec % 60).toString().padLeft(2, '0');
+          return "$m:$s";
+        } else {
+          final extra = totalSec - 5400;
+          final em = (extra ~/ 60).toString().padLeft(2, '0');
+          final es = (extra % 60).toString().padLeft(2, '0');
+          return "90:00 +$em:$es";
         }
       }
       if (timingDisplay != null && timingDisplay!.contains(':')) {
@@ -228,20 +243,19 @@ class MatchModel {
     }
 
     if (isLive) {
-      final start = firstHalfStartTime ?? timestamp;
+      DateTime? start = firstHalfStartTime ?? timestamp;
       if (start != null) {
         final diffSec = DateTime.now().difference(start).inSeconds;
-        if (diffSec >= 0) {
-          if (diffSec <= 2700) { // <= 45:00
-            final m = (diffSec ~/ 60).toString().padLeft(2, '0');
-            final s = (diffSec % 60).toString().padLeft(2, '0');
-            return "$m:$s";
-          } else {
-            final extra = diffSec - 2700;
-            final em = (extra ~/ 60).toString().padLeft(2, '0');
-            final es = (extra % 60).toString().padLeft(2, '0');
-            return "45:00 +$em:$es";
-          }
+        final clampedDiff = diffSec >= 0 ? diffSec : 0;
+        if (clampedDiff <= 2700) { // <= 45:00
+          final m = (clampedDiff ~/ 60).toString().padLeft(2, '0');
+          final s = (clampedDiff % 60).toString().padLeft(2, '0');
+          return "$m:$s";
+        } else {
+          final extra = clampedDiff - 2700;
+          final em = (extra ~/ 60).toString().padLeft(2, '0');
+          final es = (extra % 60).toString().padLeft(2, '0');
+          return "45:00 +$em:$es";
         }
       }
       if (timingDisplay != null && timingDisplay!.contains(':')) {

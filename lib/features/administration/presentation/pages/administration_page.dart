@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/theme/theme_extensions.dart';
 import '../../../news/presentation/pages/news_page.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
@@ -140,20 +141,98 @@ class AdministrationPage extends StatelessWidget {
         _buildAdminCard(
           context: context, 
           title: 'بوابة محافظي المباريات',
-          subtitle: 'تسجيل الدخول لمحافظي ومراقبي المباريات.',
+          subtitle: 'منصة مستقلة (PWA) للمحافظين مع إمكانية التثبيت والتحديث التلقائي.',
           icon: Icons.shield,
           color: const Color(0xFF1B7A36),
-          onTap: () async {
-            final savedUser = await ApiClient().getSavedUser();
-            final firebaseUser = FirebaseAuth.instance.currentUser;
-            final email = savedUser?['email'] ?? firebaseUser?.email;
-            if (context.mounted) {
-              if (email != null && email.toString().trim().isNotEmpty) {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => DelegateDashboard(email: email.toString().trim())));
-              } else {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const DelegateLoginPage()));
-              }
-            }
+          onTap: () {
+            showModalBottomSheet(
+              context: context,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              builder: (ctx) => SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: const [
+                          Icon(Icons.shield, color: Color(0xFF1B7A36), size: 28),
+                          SizedBox(width: 10),
+                          Text(
+                            'بوابة محافظي ومراقبي المباريات',
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'تم تخصيص منصة ويب مستقلة (PWA) للمحافظين قابلة للتثبيت على شاشة الهاتف (أندرويد وآيفون) وتعمل بالتحديث الفوري والمباشر مع نفس بيانات الدخول.',
+                        style: TextStyle(fontSize: 13.5, color: Colors.black87, height: 1.4),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            final uri = Uri.parse('https://rabitati-f4cc1.web.app');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          icon: const Icon(Icons.open_in_browser),
+                          label: const Text('فتح المنصة المستقلة PWA (موصى به)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1B7A36),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            final savedUser = await ApiClient().getSavedUser();
+                            final firebaseUser = FirebaseAuth.instance.currentUser;
+                            final email = savedUser?['email'] ?? firebaseUser?.email;
+                            if (context.mounted) {
+                              if (email != null && email.toString().trim().isNotEmpty) {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => DelegateDashboard(email: email.toString().trim())));
+                              } else {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => const DelegateLoginPage()));
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.phone_android),
+                          label: const Text('المتابعة عبر التطبيق'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF1B7A36),
+                            side: const BorderSide(color: Color(0xFF1B7A36)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
           },
         ),
 

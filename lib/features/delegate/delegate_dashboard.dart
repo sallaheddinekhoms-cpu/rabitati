@@ -1299,20 +1299,15 @@ class _DelegateDashboardState extends State<DelegateDashboard> {
 
     if (confirm != true) return;
 
-    // Execute start
-    try {
-      await ApiClient().updateMatchStatus(matchId, {
-        'status': 'live',
-        'match_stage': 'first_half',
-        'home_score': 0,
-        'away_score': 0,
-        'added_time1': 0,
-        'first_half_start_at': DateTime.now().toIso8601String(),
-      }).timeout(const Duration(seconds: 4));
-    } catch (_) {}
+    // Execute start with guaranteed auth & immediate Firestore persistence
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (_) {}
+    }
 
     try {
-      await FirebaseFirestore.instance.collection('matches').doc(matchId).update({
+      await FirebaseFirestore.instance.collection('matches').doc(matchId).set({
         'matchStage': 'first_half',
         'status': 'الشوط الأول',
         'score1': 0,
@@ -1320,8 +1315,19 @@ class _DelegateDashboardState extends State<DelegateDashboard> {
         'firstHalfStartTime': FieldValue.serverTimestamp(),
         'startTime': FieldValue.serverTimestamp(),
         'addedTime1': 0,
-      });
-    } catch (_) {}
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Firestore startMatch error: $e');
+    }
+
+    unawaited(ApiClient().updateMatchStatus(matchId, {
+      'status': 'live',
+      'match_stage': 'first_half',
+      'home_score': 0,
+      'away_score': 0,
+      'added_time1': 0,
+      'first_half_start_at': DateTime.now().toIso8601String(),
+    }).timeout(const Duration(seconds: 3)).catchError((_) => false));
 
     matchData['matchStage'] = 'first_half';
     matchData['status'] = 'الشوط الأول';
@@ -1623,19 +1629,16 @@ class _MatchControllerDialogState extends State<MatchControllerDialog> {
       _localData['firstHalfStartTime'] = DateTime.now().toIso8601String();
     });
 
-    try {
-      await ApiClient().updateMatchStatus(widget.matchId, {
-        'status': 'live',
-        'match_stage': 'first_half',
-        'home_score': 0,
-        'away_score': 0,
-        'added_time1': 0,
-        'first_half_start_at': DateTime.now().toIso8601String(),
-      });
-    } catch (_) {}
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (_) {}
+    }
+
+    widget.matchData.addAll(_localData);
 
     try {
-      await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).update({
+      await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).set({
         'matchStage': 'first_half',
         'status': 'الشوط الأول',
         'score1': 0,
@@ -1643,8 +1646,19 @@ class _MatchControllerDialogState extends State<MatchControllerDialog> {
         'firstHalfStartTime': FieldValue.serverTimestamp(),
         'startTime': FieldValue.serverTimestamp(),
         'addedTime1': 0,
-      });
-    } catch (_) {}
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Firestore _startFirstHalf error: $e');
+    }
+
+    unawaited(ApiClient().updateMatchStatus(widget.matchId, {
+      'status': 'live',
+      'match_stage': 'first_half',
+      'home_score': 0,
+      'away_score': 0,
+      'added_time1': 0,
+      'first_half_start_at': DateTime.now().toIso8601String(),
+    }).timeout(const Duration(seconds: 3)).catchError((_) => false));
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1678,20 +1692,28 @@ class _MatchControllerDialogState extends State<MatchControllerDialog> {
         _localData['status'] = 'استراحة بين الشوطين';
       });
 
-      try {
-        await ApiClient().updateMatchStatus(widget.matchId, {
-          'status': 'live',
-          'match_stage': 'half_time',
-        });
-      } catch (_) {}
+      if (FirebaseAuth.instance.currentUser == null) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+        } catch (_) {}
+      }
+
+      widget.matchData.addAll(_localData);
 
       try {
-        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).update({
+        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).set({
           'matchStage': 'half_time',
           'status': 'استراحة بين الشوطين',
           'firstHalfEndTime': FieldValue.serverTimestamp(),
-        });
-      } catch (_) {}
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore _endFirstHalf error: $e');
+      }
+
+      unawaited(ApiClient().updateMatchStatus(widget.matchId, {
+        'status': 'live',
+        'match_stage': 'half_time',
+      }).timeout(const Duration(seconds: 3)).catchError((_) => false));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1725,23 +1747,31 @@ class _MatchControllerDialogState extends State<MatchControllerDialog> {
         _localData['secondHalfStartTime'] = DateTime.now().toIso8601String();
       });
 
-      try {
-        await ApiClient().updateMatchStatus(widget.matchId, {
-          'status': 'live',
-          'match_stage': 'second_half',
-          'added_time2': 0,
-          'second_half_start_at': DateTime.now().toIso8601String(),
-        });
-      } catch (_) {}
+      if (FirebaseAuth.instance.currentUser == null) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+        } catch (_) {}
+      }
+
+      widget.matchData.addAll(_localData);
 
       try {
-        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).update({
+        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).set({
           'matchStage': 'second_half',
           'status': 'الشوط الثاني',
           'secondHalfStartTime': FieldValue.serverTimestamp(),
           'addedTime2': 0,
-        });
-      } catch (_) {}
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore _startSecondHalf error: $e');
+      }
+
+      unawaited(ApiClient().updateMatchStatus(widget.matchId, {
+        'status': 'live',
+        'match_stage': 'second_half',
+        'added_time2': 0,
+        'second_half_start_at': DateTime.now().toIso8601String(),
+      }).timeout(const Duration(seconds: 3)).catchError((_) => false));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1773,21 +1803,29 @@ class _MatchControllerDialogState extends State<MatchControllerDialog> {
         _localData['status'] = 'منتهية';
       });
 
-      try {
-        await ApiClient().updateMatchStatus(widget.matchId, {
-          'status': 'finished',
-          'match_stage': 'finished',
-        });
-      } catch (_) {}
+      if (FirebaseAuth.instance.currentUser == null) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+        } catch (_) {}
+      }
+
+      widget.matchData.addAll(_localData);
 
       try {
-        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).update({
+        await FirebaseFirestore.instance.collection('matches').doc(widget.matchId).set({
           'matchStage': 'finished',
           'status': 'منتهية',
           'matchEndTime': FieldValue.serverTimestamp(),
           'endTime': FieldValue.serverTimestamp(),
-        });
-      } catch (_) {}
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Firestore _endMatch error: $e');
+      }
+
+      unawaited(ApiClient().updateMatchStatus(widget.matchId, {
+        'status': 'finished',
+        'match_stage': 'finished',
+      }).timeout(const Duration(seconds: 3)).catchError((_) => false));
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
