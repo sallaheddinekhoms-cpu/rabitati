@@ -187,9 +187,12 @@ class AdministrationPage extends StatelessWidget {
                         child: ElevatedButton.icon(
                           onPressed: () async {
                             Navigator.pop(ctx);
-                            final uri = Uri.parse('https://rabitati-f4cc1.web.app');
+                            final uri = Uri.parse('https://www.lrf-blida.dz/delg-app');
                             if (await canLaunchUrl(uri)) {
                               await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            } else {
+                              final backupUri = Uri.parse('https://rabitati-f4cc1.web.app');
+                              await launchUrl(backupUri, mode: LaunchMode.externalApplication);
                             }
                           },
                           icon: const Icon(Icons.open_in_browser),
